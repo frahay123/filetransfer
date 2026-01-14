@@ -1,0 +1,44 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Compiled files
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# Qt generated files
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*_autogen/
+
+# Package files
+*.AppImage
+*.dmg
+*.zip
+*.tar.gz
+*.deb
+*.rpm
+
+# Logs
+*.log
+
+# Database files (user data)
+*.db
+
+# Config files (user data)
+.photo_transfer.db
