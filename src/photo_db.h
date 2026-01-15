@@ -6,8 +6,6 @@
 #include <vector>
 #include <cstdint>
 
-using namespace std;
-
 /**
  * Database handler for tracking transferred photos
  */
@@ -17,7 +15,7 @@ public:
     ~PhotoDB();
 
     // Database management
-    bool open(const string& db_path);
+    bool open(const std::string& db_path);
     void close();
     bool isOpen() const { return db_ != nullptr; }
 
@@ -26,16 +24,16 @@ public:
     bool initialize();
 
     // Photo operations
-    bool photoExists(const string& hash);
-    bool addPhoto(const string& hash, 
-                  const string& phone_path,
-                  const string& local_path,
+    bool photoExists(const std::string& hash);
+    bool addPhoto(const std::string& hash, 
+                  const std::string& phone_path,
+                  const std::string& local_path,
                   uint64_t file_size,
                   uint64_t modification_date);
-    bool updatePhotoPath(const string& hash, const string& new_local_path);
+    bool updatePhotoPath(const std::string& hash, const std::string& new_local_path);
     
     // Query operations
-    string getLocalPath(const string& hash);
+    std::string getLocalPath(const std::string& hash);
     uint64_t getLastSyncTime();
     bool setLastSyncTime(uint64_t timestamp);
     
@@ -44,15 +42,15 @@ public:
     uint64_t getTotalSizeTransferred();
 
     // Error handling
-    string getLastError() const { return last_error_; }
+    std::string getLastError() const { return last_error_; }
 
 private:
     sqlite3* db_;
-    string last_error_;
-    string db_path_;
+    std::string last_error_;
+    std::string db_path_;
 
-    void setError(const string& error);
-    bool executeSQL(const string& sql);
+    void setError(const std::string& error);
+    bool executeSQL(const std::string& sql);
 };
 
 #endif // PHOTO_DB_H

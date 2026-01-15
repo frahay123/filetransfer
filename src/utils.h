@@ -5,31 +5,29 @@
 #include <vector>
 #include <cstdint>
 
-using namespace std;
-
 /**
  * Utility functions for file operations and hashing
  */
 namespace Utils {
     // Hash calculation
-    string calculateSHA256(const vector<uint8_t>& data);
-    string calculateFileHash(const string& file_path);
+    std::string calculateSHA256(const std::vector<uint8_t>& data);
+    std::string calculateFileHash(const std::string& file_path);
     
     // File operations
-    bool fileExists(const string& path);
-    bool createDirectory(const string& path);
-    bool writeFile(const string& path, const vector<uint8_t>& data);
-    uint64_t getFileSize(const string& path);
-    uint64_t getFileModificationTime(const string& path);
+    bool fileExists(const std::string& path);
+    bool createDirectory(const std::string& path);
+    bool writeFile(const std::string& path, const std::vector<uint8_t>& data);
+    uint64_t getFileSize(const std::string& path);
+    uint64_t getFileModificationTime(const std::string& path);
     
     // Path operations
-    string getDirectory(const string& file_path);
-    string joinPath(const string& base, const string& path);
-    string expandPath(const string& path); // Expand ~ to home directory
+    std::string getDirectory(const std::string& file_path);
+    std::string joinPath(const std::string& base, const std::string& path);
+    std::string expandPath(const std::string& path); // Expand ~ to home directory
     
     // Date/Time operations
-    string formatDate(uint64_t timestamp);
-    string getDateFolder(uint64_t timestamp); // Returns "YYYY/MM" format
+    std::string formatDate(uint64_t timestamp);
+    std::string getDateFolder(uint64_t timestamp); // Returns "YYYY/MM" format
 }
 
 #endif // UTILS_H

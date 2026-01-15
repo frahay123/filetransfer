@@ -6,15 +6,13 @@
 #include "utils.h"
 #include <string>
 
-using namespace std;
-
 /**
  * Photo/video synchronization handler
  * Works with any DeviceHandler implementation (Android MTP or iOS)
  */
 class PhotoSync {
 public:
-    PhotoSync(DeviceHandler* device, PhotoDB* db, const string& destination_folder);
+    PhotoSync(DeviceHandler* device, PhotoDB* db, const std::string& destination_folder);
     
     // Sync operations
     struct SyncResult {
@@ -30,8 +28,8 @@ public:
     bool transferPhoto(const MediaInfo& photo);
     
     // Configuration
-    void setDestinationFolder(const string& folder) { destination_folder_ = folder; }
-    string getDestinationFolder() const { return destination_folder_; }
+    void setDestinationFolder(const std::string& folder) { destination_folder_ = folder; }
+    std::string getDestinationFolder() const { return destination_folder_; }
     
     // Statistics
     int getNewPhotoCount() const { return new_photos_; }
@@ -40,16 +38,16 @@ public:
 private:
     DeviceHandler* device_handler_;
     PhotoDB* db_;
-    string destination_folder_;
+    std::string destination_folder_;
     
     int new_photos_;
     int skipped_photos_;
     int failed_photos_;
     
     // Helper functions
-    string generateLocalPath(const MediaInfo& photo);
+    std::string generateLocalPath(const MediaInfo& photo);
     bool shouldTransferPhoto(const MediaInfo& photo, bool only_new);
-    bool verifyTransfer(const string& local_path, const vector<uint8_t>& data, const string& expected_hash);
+    bool verifyTransfer(const std::string& local_path, const std::vector<uint8_t>& data, const std::string& expected_hash);
 };
 
 #endif // PHOTO_SYNC_H
