@@ -186,6 +186,9 @@ jobs:
             mv "$APP_BUNDLE" "Photo Transfer.app"
           fi
           
+          # Remove quarantine attributes to prevent Gatekeeper warning
+          xattr -cr "Photo Transfer.app"
+          
           # Create DMG with drag-to-Applications
           mkdir -p dmg_contents
           cp -R "Photo Transfer.app" dmg_contents/
@@ -343,7 +346,8 @@ jobs:
             ### macOS
             - Download `PhotoTransfer-1.0.0-macOS.dmg`
             - Double-click to open, drag "Photo Transfer" to Applications
-            - First run: Right-click > Open (to bypass Gatekeeper)
+            - **If you see "damaged" error**: Right-click the app > Open (first time only)
+            - Or run in Terminal: `xattr -cr "/Applications/Photo Transfer.app"`
             
             ### Linux
             - Download `PhotoTransfer-1.0.0-Linux.AppImage`
