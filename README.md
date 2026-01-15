@@ -21,7 +21,7 @@ Transfer photos and videos from your phone to your computer. Works with Android 
 ### Linux
 ```bash
 # Download the AppImage
-wget https://github.com/YOUR_USERNAME/photo-transfer/releases/latest/download/PhotoTransfer-Linux.AppImage
+wget https://github.com/frahay123/filetransfer/releases/latest/download/PhotoTransfer-Linux.AppImage
 
 # Make it executable
 chmod +x PhotoTransfer-Linux.AppImage
@@ -31,13 +31,13 @@ chmod +x PhotoTransfer-Linux.AppImage
 ```
 
 ### macOS
-1. Download `PhotoTransfer-macOS.dmg` from [Releases](https://github.com/YOUR_USERNAME/photo-transfer/releases)
+1. Download `PhotoTransfer-macOS.dmg` from [Releases](https://github.com/frahay123/filetransfer/releases)
 2. Open the DMG file
 3. Drag **Photo Transfer** to your Applications folder
 4. Open from Applications (right-click → Open on first launch)
 
 ### Windows
-1. Download `PhotoTransfer-Windows.zip` from [Releases](https://github.com/YOUR_USERNAME/photo-transfer/releases)
+1. Download `PhotoTransfer-Windows.zip` from [Releases](https://github.com/frahay123/filetransfer/releases)
 2. Extract the ZIP file
 3. Run `photo_transfer_gui.exe`
 
