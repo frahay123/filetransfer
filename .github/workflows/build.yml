@@ -64,10 +64,8 @@ jobs:
           cp photo_transfer AppDir/usr/bin/
           cp photo_transfer_gui AppDir/usr/bin/
           
-          # Create a simple icon (256x256 PNG)
-          convert -size 256x256 xc:#4A90D9 \
-            -fill white -gravity center \
-            -pointsize 48 -annotate 0 "PT" \
+          # Create a simple icon (256x256 PNG) - blue gradient square
+          convert -size 256x256 gradient:#4A90D9-#2E5A87 \
             AppDir/usr/share/icons/hicolor/256x256/apps/photo-transfer.png
           
           # Create desktop file using echo (avoids YAML parsing issues)
