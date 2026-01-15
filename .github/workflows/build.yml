@@ -161,32 +161,24 @@ jobs:
           fi
           
           # Create/update Info.plist
-          cat > "$APP_BUNDLE/Contents/Info.plist" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>photo_transfer_gui</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.phototransfer.app</string>
-    <key>CFBundleName</key>
-    <string>Photo Transfer</string>
-    <key>CFBundleDisplayName</key>
-    <string>Photo Transfer</string>
-    <key>CFBundleVersion</key>
-    <string>1.0.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-</dict>
-</plist>
-EOF
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' > "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '<plist version="1.0">' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '<dict>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>CFBundleExecutable</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <string>photo_transfer_gui</string>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>CFBundleIdentifier</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <string>com.phototransfer.app</string>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>CFBundleName</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <string>Photo Transfer</string>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>CFBundleVersion</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <string>1.0.0</string>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>CFBundlePackageType</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <string>APPL</string>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <key>NSHighResolutionCapable</key>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '    <true/>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '</dict>' >> "$APP_BUNDLE/Contents/Info.plist"
+          printf '%s\n' '</plist>' >> "$APP_BUNDLE/Contents/Info.plist"
           
           # Deploy Qt frameworks
           $(brew --prefix qt@6)/bin/macdeployqt "$APP_BUNDLE" -verbose=2
