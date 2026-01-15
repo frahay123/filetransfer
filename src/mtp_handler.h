@@ -61,7 +61,7 @@ private:
     void setError(const std::string& error);
     bool findStorageForPath(const std::string& path, uint32_t& storage_id);
     std::vector<MediaInfo> enumerateDirectory(uint32_t storage_id, uint32_t parent_id, 
-                                              const std::string& base_path);
+                                         const std::string& base_path);
     bool isPhotoFile(const std::string& filename) const;
     bool isVideoFile(const std::string& filename) const;
     bool isMediaFile(const std::string& filename) const;

@@ -15,7 +15,6 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <windows.h>
-#define mkdir(path, mode) _mkdir(path)
 #define stat _stat
 #define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
 #else
@@ -23,9 +22,7 @@
 #include <pwd.h>
 #endif
 
-using namespace std;
-
-string Utils::calculateSHA256(const vector<uint8_t>& data) {
+std::string Utils::calculateSHA256(const std::vector<uint8_t>& data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_CTX sha256;
     
@@ -33,33 +30,33 @@ string Utils::calculateSHA256(const vector<uint8_t>& data) {
     SHA256_Update(&sha256, data.data(), data.size());
     SHA256_Final(hash, &sha256);
     
-    stringstream ss;
+    std::stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        ss << hex << setw(2) << setfill('0') << (int)hash[i];
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
     }
     
     return ss.str();
 }
 
-string Utils::calculateFileHash(const string& file_path) {
-    ifstream file(file_path, ios::binary);
+std::string Utils::calculateFileHash(const std::string& file_path) {
+    std::ifstream file(file_path, std::ios::binary);
     if (!file) {
         return "";
     }
     
-    vector<uint8_t> buffer((istreambuf_iterator<char>(file)),
-                          istreambuf_iterator<char>());
+    std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(file)),
+                          std::istreambuf_iterator<char>());
     file.close();
     
     return calculateSHA256(buffer);
 }
 
-bool Utils::fileExists(const string& path) {
+bool Utils::fileExists(const std::string& path) {
     struct stat buffer;
     return (stat(path.c_str(), &buffer) == 0);
 }
 
-bool Utils::createDirectory(const string& path) {
+bool Utils::createDirectory(const std::string& path) {
     // Check if already exists
     struct stat info;
     if (stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode)) {
@@ -67,7 +64,7 @@ bool Utils::createDirectory(const string& path) {
     }
     
     // Create parent directories first
-    string parent = getDirectory(path);
+    std::string parent = getDirectory(path);
     if (!parent.empty() && !fileExists(parent)) {
         if (!createDirectory(parent)) {
             return false;
@@ -82,14 +79,14 @@ bool Utils::createDirectory(const string& path) {
 #endif
 }
 
-bool Utils::writeFile(const string& path, const vector<uint8_t>& data) {
+bool Utils::writeFile(const std::string& path, const std::vector<uint8_t>& data) {
     // Create directory if needed
-    string dir = getDirectory(path);
+    std::string dir = getDirectory(path);
     if (!dir.empty() && !createDirectory(dir)) {
         return false;
     }
     
-    ofstream file(path, ios::binary);
+    std::ofstream file(path, std::ios::binary);
     if (!file) {
         return false;
     }
@@ -100,7 +97,7 @@ bool Utils::writeFile(const string& path, const vector<uint8_t>& data) {
     return file.good();
 }
 
-uint64_t Utils::getFileSize(const string& path) {
+uint64_t Utils::getFileSize(const std::string& path) {
     struct stat info;
     if (stat(path.c_str(), &info) != 0) {
         return 0;
@@ -108,7 +105,7 @@ uint64_t Utils::getFileSize(const string& path) {
     return info.st_size;
 }
 
-uint64_t Utils::getFileModificationTime(const string& path) {
+uint64_t Utils::getFileModificationTime(const std::string& path) {
     struct stat info;
     if (stat(path.c_str(), &info) != 0) {
         return 0;
@@ -116,15 +113,15 @@ uint64_t Utils::getFileModificationTime(const string& path) {
     return info.st_mtime;
 }
 
-string Utils::getDirectory(const string& file_path) {
+std::string Utils::getDirectory(const std::string& file_path) {
     size_t pos = file_path.find_last_of("/\\");
-    if (pos == string::npos) {
+    if (pos == std::string::npos) {
         return "";
     }
     return file_path.substr(0, pos);
 }
 
-string Utils::joinPath(const string& base, const string& path) {
+std::string Utils::joinPath(const std::string& base, const std::string& path) {
     if (base.empty()) return path;
     if (path.empty()) return base;
     
@@ -139,12 +136,12 @@ string Utils::joinPath(const string& base, const string& path) {
     return base + sep + path;
 }
 
-string Utils::expandPath(const string& path) {
+std::string Utils::expandPath(const std::string& path) {
     if (path.empty() || path[0] != '~') {
         return path;
     }
     
-    string home;
+    std::string home;
     
 #ifdef _WIN32
     const char* userprofile = getenv("USERPROFILE");
@@ -154,7 +151,7 @@ string Utils::expandPath(const string& path) {
         const char* homedrive = getenv("HOMEDRIVE");
         const char* homepath = getenv("HOMEPATH");
         if (homedrive && homepath) {
-            home = string(homedrive) + string(homepath);
+            home = std::string(homedrive) + std::string(homepath);
         } else {
             return path; // Can't expand
         }
@@ -180,20 +177,20 @@ string Utils::expandPath(const string& path) {
     return home + path.substr(1);
 }
 
-string Utils::formatDate(uint64_t timestamp) {
+std::string Utils::formatDate(uint64_t timestamp) {
     time_t time = timestamp;
     struct tm* timeinfo = localtime(&time);
     
     char buffer[80];
     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-    return string(buffer);
+    return std::string(buffer);
 }
 
-string Utils::getDateFolder(uint64_t timestamp) {
+std::string Utils::getDateFolder(uint64_t timestamp) {
     time_t time = timestamp;
     struct tm* timeinfo = localtime(&time);
     
     char buffer[20];
     strftime(buffer, sizeof(buffer), "%Y/%m", timeinfo);
-    return string(buffer);
+    return std::string(buffer);
 }
