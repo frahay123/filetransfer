@@ -10,17 +10,33 @@ option(BUILD_GUI "Build Qt GUI version" ON)
 option(ENABLE_ANDROID "Enable Android/MTP support" ON)
 option(ENABLE_IOS "Enable iOS/libimobiledevice support" ON)
 
-# Find required packages
-find_package(PkgConfig REQUIRED)
-
-# Find libmtp (for Android support)
-pkg_check_modules(LIBMTP libmtp)
-
-# Find libimobiledevice (for iOS support) - optional
-pkg_check_modules(LIBIMOBILEDEVICE libimobiledevice-1.0)
-
-# Find libfuse3 (for later phases) - optional
-pkg_check_modules(FUSE3 fuse3)
+# Find required packages (PkgConfig not available on Windows)
+if(NOT WIN32)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        # Find libmtp (for Android support)
+        pkg_check_modules(LIBMTP libmtp)
+        
+        # Find libimobiledevice (for iOS support) - optional
+        pkg_check_modules(LIBIMOBILEDEVICE libimobiledevice-1.0)
+        
+        # Find libfuse3 (for later phases) - optional
+        pkg_check_modules(FUSE3 fuse3)
+        
+        # Add library directories for proper linking
+        if(LIBMTP_FOUND)
+            link_directories(${LIBMTP_LIBRARY_DIRS})
+        endif()
+        if(LIBIMOBILEDEVICE_FOUND)
+            link_directories(${LIBIMOBILEDEVICE_LIBRARY_DIRS})
+        endif()
+    endif()
+else()
+    # Windows: No MTP/iOS support via pkg-config
+    set(LIBMTP_FOUND FALSE)
+    set(LIBIMOBILEDEVICE_FOUND FALSE)
+    set(FUSE3_FOUND FALSE)
+endif()
 
 # Find SQLite3 (for photo tracking database)
 find_library(SQLITE3_LIB sqlite3)
@@ -123,7 +139,11 @@ if(FUSE3_FOUND)
 endif()
 
 # Compiler flags
-set(COMPILE_FLAGS -Wall -Wextra)
+if(MSVC)
+    set(COMPILE_FLAGS /W4)
+else()
+    set(COMPILE_FLAGS -Wall -Wextra)
+endif()
 
 if(LIBMTP_FOUND)
     list(APPEND COMPILE_FLAGS ${LIBMTP_CFLAGS_OTHER})
