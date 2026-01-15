@@ -9,7 +9,11 @@
 #include <memory>
 
 #ifdef ENABLE_ANDROID
-#include "mtp_handler.h"
+    #ifdef USE_WPD
+        #include "wpd_handler.h"
+    #else
+        #include "mtp_handler.h"
+    #endif
 #endif
 
 #ifdef ENABLE_IOS
@@ -187,7 +191,11 @@ void printUsage(const char* program_name) {
 unique_ptr<DeviceHandler> createDeviceHandler(const string& device_type) {
 #ifdef ENABLE_ANDROID
     if (device_type == "android") {
+    #ifdef USE_WPD
+        return make_unique<WPDHandler>();
+    #else
         return make_unique<MTPHandler>();
+    #endif
     }
 #endif
 
@@ -200,10 +208,14 @@ unique_ptr<DeviceHandler> createDeviceHandler(const string& device_type) {
     // Auto-detect: try Android first, then iOS
     if (device_type == "auto" || device_type.empty()) {
 #ifdef ENABLE_ANDROID
-        auto mtp = make_unique<MTPHandler>();
-        if (mtp->detectDevices()) {
+    #ifdef USE_WPD
+        auto handler = make_unique<WPDHandler>();
+    #else
+        auto handler = make_unique<MTPHandler>();
+    #endif
+        if (handler->detectDevices()) {
             cout << "Auto-detected Android device" << endl;
-            return mtp;
+            return handler;
         }
 #endif
 

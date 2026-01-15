@@ -32,10 +32,12 @@ if(NOT WIN32)
         endif()
     endif()
 else()
-    # Windows: No MTP/iOS support via pkg-config
+    # Windows: Use WPD API for Android/MTP support (built into Windows)
     set(LIBMTP_FOUND FALSE)
+    set(WPD_FOUND TRUE)
     set(LIBIMOBILEDEVICE_FOUND FALSE)
     set(FUSE3_FOUND FALSE)
+    message(STATUS "Windows detected: Using Windows Portable Devices (WPD) API for MTP")
 endif()
 
 # Find SQLite3 (for photo tracking database)
@@ -66,9 +68,13 @@ if(BUILD_GUI)
 endif()
 
 # Validate device support
-if(ENABLE_ANDROID AND NOT LIBMTP_FOUND)
-    message(WARNING "Android support requested but libmtp not found. Android support will be disabled.")
-    set(ENABLE_ANDROID OFF)
+if(ENABLE_ANDROID)
+    if(WIN32 AND WPD_FOUND)
+        message(STATUS "Android support via Windows Portable Devices (WPD)")
+    elseif(NOT LIBMTP_FOUND)
+        message(WARNING "Android support requested but libmtp not found. Android support will be disabled.")
+        set(ENABLE_ANDROID OFF)
+    endif()
 endif()
 
 if(ENABLE_IOS AND NOT LIBIMOBILEDEVICE_FOUND)
@@ -107,10 +113,15 @@ set(CORE_SOURCES
     src/transfer_queue.cpp
 )
 
-# Add MTP handler if Android support is enabled
-if(ENABLE_ANDROID AND LIBMTP_FOUND)
-    list(APPEND CORE_SOURCES src/mtp_handler.cpp)
-    add_definitions(-DENABLE_ANDROID)
+# Add MTP/WPD handler if Android support is enabled
+if(ENABLE_ANDROID)
+    if(WIN32 AND WPD_FOUND)
+        list(APPEND CORE_SOURCES src/wpd_handler.cpp)
+        add_definitions(-DENABLE_ANDROID -DUSE_WPD)
+    elseif(LIBMTP_FOUND)
+        list(APPEND CORE_SOURCES src/mtp_handler.cpp)
+        add_definitions(-DENABLE_ANDROID)
+    endif()
 endif()
 
 # Add iOS handler if iOS support is enabled
@@ -126,8 +137,13 @@ set(CORE_LIBS
     OpenSSL::Crypto
 )
 
-if(ENABLE_ANDROID AND LIBMTP_FOUND)
-    list(APPEND CORE_LIBS ${LIBMTP_LIBRARIES})
+if(ENABLE_ANDROID)
+    if(WIN32 AND WPD_FOUND)
+        # WPD libraries are linked via #pragma comment in the source
+        list(APPEND CORE_LIBS ole32 uuid)
+    elseif(LIBMTP_FOUND)
+        list(APPEND CORE_LIBS ${LIBMTP_LIBRARIES})
+    endif()
 endif()
 
 if(ENABLE_IOS AND LIBIMOBILEDEVICE_FOUND)

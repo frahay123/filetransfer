@@ -173,7 +173,7 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_GUI=ON `
-            -DENABLE_ANDROID=OFF `
+            -DENABLE_ANDROID=ON `
             -DENABLE_IOS=OFF `
             -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
           cmake --build . --config Release

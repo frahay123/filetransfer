@@ -32,7 +32,11 @@
 #include <QMovie>
 
 #ifdef ENABLE_ANDROID
-#include "../src/mtp_handler.h"
+    #ifdef USE_WPD
+        #include "../src/wpd_handler.h"
+    #else
+        #include "../src/mtp_handler.h"
+    #endif
 #endif
 #ifdef ENABLE_IOS
 #include "../src/ios_handler.h"
@@ -1005,7 +1009,11 @@ void MainWindow::onRefreshDevices() {
     deviceCombo_->addItem("🔍 Searching...");
     
 #ifdef ENABLE_ANDROID
+    #ifdef USE_WPD
+    auto mtp = std::make_unique<WPDHandler>();
+    #else
     auto mtp = std::make_unique<MTPHandler>();
+    #endif
     if (mtp->detectDevices()) {
         deviceCombo_->clear();
         deviceCombo_->addItem("📱 Android: " + QString::fromStdString(mtp->getDeviceName()), "android");
@@ -1050,7 +1058,11 @@ void MainWindow::onConnectDevice() {
     
 #ifdef ENABLE_ANDROID
     if (deviceType == "android") {
+    #ifdef USE_WPD
+        deviceHandler_ = std::make_unique<WPDHandler>();
+    #else
         deviceHandler_ = std::make_unique<MTPHandler>();
+    #endif
     }
 #endif
     
