@@ -21,6 +21,7 @@ jobs:
             libmtp-dev libfuse3-dev libsqlite3-dev libssl-dev \
             libimobiledevice-dev libplist-dev usbmuxd \
             qt6-base-dev qt6-base-dev-tools qt6-tools-dev \
+            libgl1-mesa-dev libxkbcommon-dev \
             wget fuse libfuse2
       
       - name: Build CLI
@@ -32,7 +33,11 @@ jobs:
       - name: Build GUI
         run: |
           mkdir build-gui && cd build-gui
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DQt6_DIR=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+          export Qt6_DIR=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+          export CMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON \
+            -DQt6_DIR=$Qt6_DIR \
+            -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH
           cmake --build . --target photo_transfer -- -j$(nproc)
           cmake --build . --target photo_transfer_gui -- -j$(nproc)
       
