@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <cstdint>
 
+using namespace std;
+
 PhotoDB::PhotoDB() : db_(nullptr) {
 }
 
