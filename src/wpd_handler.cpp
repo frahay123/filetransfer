@@ -14,13 +14,14 @@
 #pragma comment(lib, "Propsys.lib")
 
 using Microsoft::WRL::ComPtr;
-using namespace std;
 
 // Client information for WPD
 static const wchar_t* CLIENT_NAME = L"PhotoTransfer";
-static const wchar_t* CLIENT_MAJOR_VER = L"1";
-static const wchar_t* CLIENT_MINOR_VER = L"0";
-static const wchar_t* CLIENT_REVISION = L"0";
+
+void WPDHandler::setError(const std::string& error) {
+    last_error_ = error;
+    std::cerr << "WPD Error: " << error << std::endl;
+}
 
 WPDHandler::WPDHandler()
     : device_manager_(nullptr)
@@ -54,18 +55,18 @@ void WPDHandler::uninitializeCOM() {
     }
 }
 
-wstring WPDHandler::stringToWide(const string& str) {
-    if (str.empty()) return wstring();
+std::wstring WPDHandler::stringToWide(const std::string& str) const {
+    if (str.empty()) return std::wstring();
     int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
-    wstring result(size - 1, 0);
+    std::wstring result(size - 1, 0);
     MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &result[0], size);
     return result;
 }
 
-string WPDHandler::wideToString(const wstring& wstr) {
-    if (wstr.empty()) return string();
+std::string WPDHandler::wideToString(const std::wstring& wstr) const {
+    if (wstr.empty()) return std::string();
     int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    string result(size - 1, 0);
+    std::string result(size - 1, 0);
     WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &result[0], size, nullptr, nullptr);
     return result;
 }
@@ -97,10 +98,10 @@ bool WPDHandler::detectDevices() {
         return false;
     }
 
-    cout << "Found " << device_count << " portable device(s)" << endl;
+    std::cout << "Found " << device_count << " portable device(s)" << std::endl;
 
     // Get device IDs
-    vector<PWSTR> device_ids(device_count);
+    std::vector<PWSTR> device_ids(device_count);
     hr = device_manager_->GetDevices(device_ids.data(), &device_count);
     if (FAILED(hr)) {
         setError("Failed to get device IDs");
@@ -115,7 +116,7 @@ bool WPDHandler::detectDevices() {
         DWORD name_length = 0;
         device_manager_->GetDeviceFriendlyName(device_ids[0], nullptr, &name_length);
         if (name_length > 0) {
-            vector<wchar_t> name(name_length);
+            std::vector<wchar_t> name(name_length);
             if (SUCCEEDED(device_manager_->GetDeviceFriendlyName(device_ids[0], name.data(), &name_length))) {
                 device_name_ = wideToString(name.data());
             }
@@ -125,7 +126,7 @@ bool WPDHandler::detectDevices() {
         DWORD mfr_length = 0;
         device_manager_->GetDeviceManufacturer(device_ids[0], nullptr, &mfr_length);
         if (mfr_length > 0) {
-            vector<wchar_t> mfr(mfr_length);
+            std::vector<wchar_t> mfr(mfr_length);
             if (SUCCEEDED(device_manager_->GetDeviceManufacturer(device_ids[0], mfr.data(), &mfr_length))) {
                 device_manufacturer_ = wideToString(mfr.data());
             }
@@ -135,13 +136,13 @@ bool WPDHandler::detectDevices() {
         DWORD desc_length = 0;
         device_manager_->GetDeviceDescription(device_ids[0], nullptr, &desc_length);
         if (desc_length > 0) {
-            vector<wchar_t> desc(desc_length);
+            std::vector<wchar_t> desc(desc_length);
             if (SUCCEEDED(device_manager_->GetDeviceDescription(device_ids[0], desc.data(), &desc_length))) {
                 device_model_ = wideToString(desc.data());
             }
         }
 
-        cout << "Device: " << device_name_ << " (" << device_manufacturer_ << ")" << endl;
+        std::cout << "Device: " << device_name_ << " (" << device_manufacturer_ << ")" << std::endl;
     }
 
     // Free device IDs
@@ -152,7 +153,7 @@ bool WPDHandler::detectDevices() {
     return true;
 }
 
-bool WPDHandler::connectToDevice(const string& device_name, bool auto_unmount) {
+bool WPDHandler::connectToDevice(const std::string& device_name, bool auto_unmount) {
     (void)device_name;  // Not used in WPD - we use the detected device
     (void)auto_unmount;
 
@@ -204,7 +205,7 @@ bool WPDHandler::connectToDevice(const string& device_name, bool auto_unmount) {
     }
 
     connected_ = true;
-    cout << "Connected to device: " << device_name_ << endl;
+    std::cout << "Connected to device: " << device_name_ << std::endl;
     return true;
 }
 
@@ -235,20 +236,20 @@ bool WPDHandler::isConnected() const {
     return connected_;
 }
 
-string WPDHandler::getDeviceName() const {
+std::string WPDHandler::getDeviceName() const {
     return device_name_;
 }
 
-string WPDHandler::getDeviceManufacturer() const {
+std::string WPDHandler::getDeviceManufacturer() const {
     return device_manufacturer_;
 }
 
-string WPDHandler::getDeviceModel() const {
+std::string WPDHandler::getDeviceModel() const {
     return device_model_;
 }
 
-vector<DeviceStorageInfo> WPDHandler::getStorageInfo() const {
-    vector<DeviceStorageInfo> storages;
+std::vector<DeviceStorageInfo> WPDHandler::getStorageInfo() const {
+    std::vector<DeviceStorageInfo> storages;
     
     if (!content_) return storages;
 
@@ -303,14 +304,14 @@ vector<DeviceStorageInfo> WPDHandler::getStorageInfo() const {
     return storages;
 }
 
-bool WPDHandler::isMediaFile(const wstring& filename) {
-    wstring ext = filename;
+bool WPDHandler::isMediaFile(const std::wstring& filename) const {
+    std::wstring ext = filename;
     size_t pos = ext.rfind(L'.');
-    if (pos == wstring::npos) return false;
+    if (pos == std::wstring::npos) return false;
     ext = ext.substr(pos);
     
     // Convert to lowercase
-    transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
     
     // Photo extensions
     if (ext == L".jpg" || ext == L".jpeg" || ext == L".png" || 
@@ -330,12 +331,12 @@ bool WPDHandler::isMediaFile(const wstring& filename) {
     return false;
 }
 
-string WPDHandler::getMimeType(const wstring& filename) {
-    wstring ext = filename;
+std::string WPDHandler::getMimeType(const std::wstring& filename) const {
+    std::wstring ext = filename;
     size_t pos = ext.rfind(L'.');
-    if (pos == wstring::npos) return "application/octet-stream";
+    if (pos == std::wstring::npos) return "application/octet-stream";
     ext = ext.substr(pos);
-    transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
     
     if (ext == L".jpg" || ext == L".jpeg") return "image/jpeg";
     if (ext == L".png") return "image/png";
@@ -349,7 +350,7 @@ string WPDHandler::getMimeType(const wstring& filename) {
     return "application/octet-stream";
 }
 
-void WPDHandler::enumerateContent(const wstring& parent_id, vector<MediaInfo>& media) {
+void WPDHandler::enumerateContent(const std::wstring& parent_id, std::vector<MediaInfo>& media) {
     if (!content_) return;
 
     ComPtr<IEnumPortableDeviceObjectIDs> enum_ids;
@@ -384,7 +385,7 @@ void WPDHandler::enumerateContent(const wstring& parent_id, vector<MediaInfo>& m
                     PWSTR name = nullptr;
                     if (SUCCEEDED(values->GetStringValue(WPD_OBJECT_ORIGINAL_FILE_NAME, &name)) ||
                         SUCCEEDED(values->GetStringValue(WPD_OBJECT_NAME, &name))) {
-                        wstring filename = name;
+                        std::wstring filename = name;
                         CoTaskMemFree(name);
                         
                         if (isMediaFile(filename)) {
@@ -427,10 +428,10 @@ void WPDHandler::enumerateContent(const wstring& parent_id, vector<MediaInfo>& m
     }
 }
 
-vector<MediaInfo> WPDHandler::enumerateMedia(const string& directory_path) {
+std::vector<MediaInfo> WPDHandler::enumerateMedia(const std::string& directory_path) {
     (void)directory_path;  // We enumerate all media
     
-    vector<MediaInfo> media;
+    std::vector<MediaInfo> media;
     object_id_map_.clear();
     
     if (!content_) {
@@ -438,20 +439,20 @@ vector<MediaInfo> WPDHandler::enumerateMedia(const string& directory_path) {
         return media;
     }
 
-    cout << "Enumerating media files..." << endl;
+    std::cout << "Enumerating media files..." << std::endl;
     enumerateContent(WPD_DEVICE_OBJECT_ID, media);
-    cout << "Found " << media.size() << " media files" << endl;
+    std::cout << "Found " << media.size() << " media files" << std::endl;
     
     return media;
 }
 
-bool WPDHandler::readFile(uint32_t object_id, vector<uint8_t>& data) {
+bool WPDHandler::readFile(uint32_t object_id, std::vector<uint8_t>& data) {
     if (!content_ || object_id >= object_id_map_.size()) {
         setError("Invalid object ID or not connected");
         return false;
     }
 
-    const wstring& obj_id = object_id_map_[object_id];
+    const std::wstring& obj_id = object_id_map_[object_id];
     
     ComPtr<IPortableDeviceResources> resources;
     HRESULT hr = content_->Transfer(&resources);
@@ -471,7 +472,7 @@ bool WPDHandler::readFile(uint32_t object_id, vector<uint8_t>& data) {
 
     // Read file in chunks
     data.clear();
-    vector<BYTE> buffer(optimal_buffer_size > 0 ? optimal_buffer_size : 262144);
+    std::vector<BYTE> buffer(optimal_buffer_size > 0 ? optimal_buffer_size : 262144);
     ULONG bytes_read = 0;
 
     while (true) {
@@ -481,12 +482,6 @@ bool WPDHandler::readFile(uint32_t object_id, vector<uint8_t>& data) {
     }
 
     return true;
-}
-
-bool WPDHandler::deleteFile(uint32_t object_id) {
-    // Not implemented - we don't delete files
-    (void)object_id;
-    return false;
 }
 
 bool WPDHandler::fileExists(uint32_t object_id) {

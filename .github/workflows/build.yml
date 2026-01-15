@@ -109,7 +109,16 @@ jobs:
           cd build
           mkdir -p "Photo Transfer.app/Contents/MacOS"
           mkdir -p "Photo Transfer.app/Contents/Resources"
-          cp photo_transfer photo_transfer_gui "Photo Transfer.app/Contents/MacOS/"
+          # CLI executable
+          if [ -f photo_transfer ]; then
+            cp photo_transfer "Photo Transfer.app/Contents/MacOS/"
+          fi
+          # GUI executable - check both possible locations
+          if [ -f photo_transfer_gui.app/Contents/MacOS/photo_transfer_gui ]; then
+            cp photo_transfer_gui.app/Contents/MacOS/photo_transfer_gui "Photo Transfer.app/Contents/MacOS/"
+          elif [ -f photo_transfer_gui ]; then
+            cp photo_transfer_gui "Photo Transfer.app/Contents/MacOS/"
+          fi
           
           # Create Info.plist
           cat > "Photo Transfer.app/Contents/Info.plist" << 'EOF'
@@ -146,7 +155,7 @@ jobs:
           name: macos-build
           path: |
             build/photo_transfer
-            build/photo_transfer_gui
+            build/photo_transfer_gui.app
             build/*.dmg
 
   build-windows:

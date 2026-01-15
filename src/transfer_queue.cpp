@@ -6,7 +6,14 @@
 #include <chrono>
 #include <ctime>
 #include <thread>
+#include <cstdio>
+
+#ifdef _WIN32
+#include <io.h>
+#define unlink _unlink
+#else
 #include <unistd.h>
+#endif
 
 using namespace std;
 

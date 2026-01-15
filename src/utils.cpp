@@ -5,13 +5,23 @@
 #include <iomanip>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <pwd.h>
 #include <ctime>
 #include <cstring>
 #include <cstdint>
 #include <iterator>
 #include <errno.h>
+#include <cstdlib>
+
+#ifdef _WIN32
+#include <direct.h>
+#include <windows.h>
+#define mkdir(path, mode) _mkdir(path)
+#define stat _stat
+#define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
+#else
+#include <unistd.h>
+#include <pwd.h>
+#endif
 
 using namespace std;
 
@@ -65,7 +75,11 @@ bool Utils::createDirectory(const string& path) {
     }
     
     // Create directory
+#ifdef _WIN32
+    return (_mkdir(path.c_str()) == 0 || errno == EEXIST);
+#else
     return (mkdir(path.c_str(), 0755) == 0 || errno == EEXIST);
+#endif
 }
 
 bool Utils::writeFile(const string& path, const vector<uint8_t>& data) {
@@ -103,7 +117,7 @@ uint64_t Utils::getFileModificationTime(const string& path) {
 }
 
 string Utils::getDirectory(const string& file_path) {
-    size_t pos = file_path.find_last_of("/");
+    size_t pos = file_path.find_last_of("/\\");
     if (pos == string::npos) {
         return "";
     }
@@ -114,10 +128,15 @@ string Utils::joinPath(const string& base, const string& path) {
     if (base.empty()) return path;
     if (path.empty()) return base;
     
-    if (base.back() == '/') {
+    char sep = '/';
+#ifdef _WIN32
+    sep = '\\';
+#endif
+    
+    if (base.back() == '/' || base.back() == '\\') {
         return base + path;
     }
-    return base + "/" + path;
+    return base + sep + path;
 }
 
 string Utils::expandPath(const string& path) {
@@ -126,6 +145,21 @@ string Utils::expandPath(const string& path) {
     }
     
     string home;
+    
+#ifdef _WIN32
+    const char* userprofile = getenv("USERPROFILE");
+    if (userprofile) {
+        home = userprofile;
+    } else {
+        const char* homedrive = getenv("HOMEDRIVE");
+        const char* homepath = getenv("HOMEPATH");
+        if (homedrive && homepath) {
+            home = string(homedrive) + string(homepath);
+        } else {
+            return path; // Can't expand
+        }
+    }
+#else
     const char* home_env = getenv("HOME");
     if (home_env) {
         home = home_env;
@@ -137,6 +171,7 @@ string Utils::expandPath(const string& path) {
             return path; // Can't expand, return as-is
         }
     }
+#endif
     
     if (path.length() == 1) {
         return home;
@@ -159,6 +194,6 @@ string Utils::getDateFolder(uint64_t timestamp) {
     struct tm* timeinfo = localtime(&time);
     
     char buffer[20];
-    strftime(buffer, sizeof(buffer), "%Y/%02m", timeinfo);
+    strftime(buffer, sizeof(buffer), "%Y/%m", timeinfo);
     return string(buffer);
 }

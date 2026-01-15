@@ -33,7 +33,6 @@ public:
 
     std::vector<MediaInfo> enumerateMedia(const std::string& directory_path = "") override;
     bool readFile(uint32_t object_id, std::vector<uint8_t>& data) override;
-    bool deleteFile(uint32_t object_id) override;
     bool fileExists(uint32_t object_id) override;
 
     std::string getLastError() const override { return last_error_; }
@@ -41,12 +40,14 @@ public:
 private:
     bool initializeCOM();
     void uninitializeCOM();
-    std::wstring stringToWide(const std::string& str);
-    std::string wideToString(const std::wstring& wstr);
+    std::wstring stringToWide(const std::string& str) const;
+    std::string wideToString(const std::wstring& wstr) const;
     
     void enumerateContent(const std::wstring& parent_id, std::vector<MediaInfo>& media);
-    bool isMediaFile(const std::wstring& filename);
-    std::string getMimeType(const std::wstring& filename);
+    bool isMediaFile(const std::wstring& filename) const;
+    std::string getMimeType(const std::wstring& filename) const;
+    
+    void setError(const std::string& error);
 
     IPortableDeviceManager* device_manager_;
     IPortableDevice* device_;
@@ -56,6 +57,7 @@ private:
     std::string device_name_;
     std::string device_manufacturer_;
     std::string device_model_;
+    std::string last_error_;
     
     bool com_initialized_;
     bool connected_;
