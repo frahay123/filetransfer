@@ -70,17 +70,15 @@ jobs:
             -pointsize 48 -annotate 0 "PT" \
             AppDir/usr/share/icons/hicolor/256x256/apps/photo-transfer.png
           
-          # Create desktop file (no leading whitespace!)
-          cat > AppDir/usr/share/applications/photo-transfer.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Photo Transfer
-Comment=Transfer photos from mobile devices
-Exec=photo_transfer_gui
-Icon=photo-transfer
-Categories=Utility;Graphics;
-Terminal=false
-EOF
+          # Create desktop file using echo (avoids YAML parsing issues)
+          echo "[Desktop Entry]" > AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Type=Application" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Name=Photo Transfer" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Comment=Transfer photos from mobile devices" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Exec=photo_transfer_gui" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Icon=photo-transfer" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Categories=Utility;Graphics;" >> AppDir/usr/share/applications/photo-transfer.desktop
+          echo "Terminal=false" >> AppDir/usr/share/applications/photo-transfer.desktop
           
           # Copy icon to root for linuxdeploy
           cp AppDir/usr/share/icons/hicolor/256x256/apps/photo-transfer.png AppDir/
