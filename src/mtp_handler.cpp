@@ -454,99 +454,44 @@ vector<MediaInfo> MTPHandler::enumerateDirectory(uint32_t storage_id,
     
     if (!device_) return photos;
 
-    // Try using LIBMTP_Get_Children first, which might work better for some devices
-    uint32_t* children = nullptr;
-    int child_count = 0;
-    int ret = LIBMTP_Get_Children(device_, storage_id, parent_id, &children);
+    // Use LIBMTP_Get_Files_And_Folders which is available in all libmtp versions
+    LIBMTP_file_t* files = LIBMTP_Get_Files_And_Folders(device_, storage_id, parent_id);
     
-    if (ret == 0 && children != nullptr) {
-        // Count children
-        for (int i = 0; children[i] != 0; i++) {
-            child_count++;
-        }
+    if (files != nullptr) {
+        LIBMTP_file_t* file = files;
         
-        // If we got children IDs, get metadata for each
-        if (child_count > 0) {
-            for (int i = 0; i < child_count; i++) {
-                LIBMTP_file_t* file = LIBMTP_Get_Filemetadata(device_, children[i]);
-                if (file != nullptr) {
-                    string filename = file->filename ? string(file->filename) : "unknown";
-                    if (file->filetype == LIBMTP_FILETYPE_FOLDER) {
-                        string sub_path = base_path.empty() ? filename :
-                            base_path + "/" + filename;
-                        auto sub_photos = enumerateDirectory(storage_id, file->item_id, sub_path);
-                        photos.insert(photos.end(), sub_photos.begin(), sub_photos.end());
-                    } else {
-                        // Check for photos, videos, or unknown file types that might be media
-                        if (file->filetype == LIBMTP_FILETYPE_JPEG || 
-                            file->filetype == LIBMTP_FILETYPE_PNG ||
-                            file->filetype == LIBMTP_FILETYPE_GIF ||
-                            file->filetype == LIBMTP_FILETYPE_BMP ||
-                            file->filetype == LIBMTP_FILETYPE_MP4 ||
-                            file->filetype == LIBMTP_FILETYPE_AVI ||
-                            file->filetype == LIBMTP_FILETYPE_UNDEF_VIDEO ||
-                            isMediaFile(filename)) {
-                            MediaInfo info;
-                            info.object_id = file->item_id;
-                            info.filename = filename;
-                            info.path = base_path.empty() ? filename : base_path + "/" + filename;
-                            info.file_size = file->filesize;
-                            info.modification_date = file->modificationdate;
-                            info.mime_type = getMimeType(filename);
-                            photos.push_back(info);
-                        }
-                    }
-                    LIBMTP_destroy_file_t(file);
+        while (file != nullptr) {
+            if (file->filetype == LIBMTP_FILETYPE_FOLDER) {
+                string sub_path = base_path.empty() ? 
+                    (file->filename ? string(file->filename) : "") :
+                    base_path + "/" + (file->filename ? string(file->filename) : "");
+                auto sub_photos = enumerateDirectory(storage_id, file->item_id, sub_path);
+                photos.insert(photos.end(), sub_photos.begin(), sub_photos.end());
+            } else {
+                string filename = file->filename ? string(file->filename) : "";
+                // Check for photos, videos, or unknown file types that might be media
+                if (file->filetype == LIBMTP_FILETYPE_JPEG || 
+                    file->filetype == LIBMTP_FILETYPE_PNG ||
+                    file->filetype == LIBMTP_FILETYPE_GIF ||
+                    file->filetype == LIBMTP_FILETYPE_BMP ||
+                    file->filetype == LIBMTP_FILETYPE_MP4 ||
+                    file->filetype == LIBMTP_FILETYPE_AVI ||
+                    file->filetype == LIBMTP_FILETYPE_UNDEF_VIDEO ||
+                    isMediaFile(filename)) {
+                    MediaInfo info;
+                    info.object_id = file->item_id;
+                    info.filename = filename;
+                    info.path = base_path.empty() ? filename : base_path + "/" + filename;
+                    info.file_size = file->filesize;
+                    info.modification_date = file->modificationdate;
+                    info.mime_type = getMimeType(filename);
+                    photos.push_back(info);
                 }
             }
+            file = file->next;
         }
-        if (children) free(children);
-    }
-    
-    // Fallback to LIBMTP_Get_Files_And_Folders if Get_Children didn't work
-    if (photos.empty()) {
-        LIBMTP_file_t* files = LIBMTP_Get_Files_And_Folders(device_, storage_id, parent_id);
-        
-        if (files != nullptr) {
-            LIBMTP_file_t* file = files;
-            int folder_count = 0;
-            int file_count = 0;
-            
-            while (file != nullptr) {
-                if (file->filetype == LIBMTP_FILETYPE_FOLDER) {
-                    folder_count++;
-                    string sub_path = base_path.empty() ? 
-                        (file->filename ? string(file->filename) : "") :
-                        base_path + "/" + (file->filename ? string(file->filename) : "");
-                    auto sub_photos = enumerateDirectory(storage_id, file->item_id, sub_path);
-                    photos.insert(photos.end(), sub_photos.begin(), sub_photos.end());
-                } else {
-                    string filename = file->filename ? string(file->filename) : "";
-                    // Check for photos, videos, or unknown file types that might be media
-                    if (file->filetype == LIBMTP_FILETYPE_JPEG || 
-                        file->filetype == LIBMTP_FILETYPE_PNG ||
-                        file->filetype == LIBMTP_FILETYPE_GIF ||
-                        file->filetype == LIBMTP_FILETYPE_BMP ||
-                        file->filetype == LIBMTP_FILETYPE_MP4 ||
-                        file->filetype == LIBMTP_FILETYPE_AVI ||
-                        file->filetype == LIBMTP_FILETYPE_UNDEF_VIDEO ||
-                        isMediaFile(filename)) {
-                        file_count++;
-                        MediaInfo info;
-                        info.object_id = file->item_id;
-                        info.filename = filename;
-                        info.path = base_path.empty() ? filename : base_path + "/" + filename;
-                        info.file_size = file->filesize;
-                        info.modification_date = file->modificationdate;
-                        info.mime_type = getMimeType(filename);
-                        photos.push_back(info);
-                    }
-                }
-                file = file->next;
-            }
 
-            LIBMTP_destroy_file_t(files);
-        }
+        LIBMTP_destroy_file_t(files);
     }
 
     return photos;
