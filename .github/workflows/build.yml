@@ -20,7 +20,7 @@ jobs:
             build-essential cmake pkg-config \
             libmtp-dev libfuse3-dev libsqlite3-dev libssl-dev \
             libimobiledevice-dev libplist-dev usbmuxd \
-            qt6-base-dev qt6-tools-dev \
+            qt6-base-dev qt6-base-dev-tools qt6-tools-dev \
             wget fuse libfuse2
       
       - name: Build CLI
@@ -32,13 +32,19 @@ jobs:
       - name: Build GUI
         run: |
           mkdir build-gui && cd build-gui
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON
-          make -j$(nproc)
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DQt6_DIR=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+          cmake --build . --target photo_transfer -- -j$(nproc)
+          cmake --build . --target photo_transfer_gui -- -j$(nproc)
       
       - name: Create AppImage
         run: |
           cd build-gui
           mkdir -p AppDir/usr/bin
+          if [ ! -f photo_transfer_gui ]; then
+            echo "photo_transfer_gui not built. Check Qt install or CMake output."
+            ls -la
+            exit 1
+          fi
           cp photo_transfer photo_transfer_gui AppDir/usr/bin/
           
           # Download linuxdeploy
