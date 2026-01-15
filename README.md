@@ -18,28 +18,26 @@ Transfer photos and videos from your phone to your computer. Works with Android 
 
 ## Download
 
+**Note:** Pre-built releases are available on the [Releases](https://github.com/frahay123/filetransfer/releases) page. If no releases are available yet, you can build from source (see below).
+
 ### Linux
-```bash
-# Download the AppImage
-wget https://github.com/frahay123/filetransfer/releases/latest/download/PhotoTransfer-Linux.AppImage
-
-# Make it executable
-chmod +x PhotoTransfer-Linux.AppImage
-
-# Run it
-./PhotoTransfer-Linux.AppImage
-```
+1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
+2. Download the `.AppImage` file (e.g., `PhotoTransfer-*-x86_64.AppImage`)
+3. Make it executable: `chmod +x PhotoTransfer-*.AppImage`
+4. Run it: `./PhotoTransfer-*.AppImage`
 
 ### macOS
-1. Download `PhotoTransfer-macOS.dmg` from [Releases](https://github.com/frahay123/filetransfer/releases)
-2. Open the DMG file
-3. Drag **Photo Transfer** to your Applications folder
-4. Open from Applications (right-click → Open on first launch)
+1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
+2. Download the `.dmg` file (e.g., `PhotoTransfer-*-macOS.dmg`)
+3. Open the DMG file
+4. Drag **Photo Transfer** to your Applications folder
+5. Open from Applications (right-click → Open on first launch)
 
 ### Windows
-1. Download `PhotoTransfer-Windows.zip` from [Releases](https://github.com/frahay123/filetransfer/releases)
-2. Extract the ZIP file
-3. Run `photo_transfer_gui.exe`
+1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
+2. Download the `.zip` file (e.g., `PhotoTransfer-*-Windows.zip`)
+3. Extract the ZIP file
+4. Run `photo_transfer_gui.exe`
 
 ---
 
