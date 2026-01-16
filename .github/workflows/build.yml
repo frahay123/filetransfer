@@ -263,6 +263,8 @@ jobs:
           !insertmacro MUI_PAGE_WELCOME
           !insertmacro MUI_PAGE_DIRECTORY
           !insertmacro MUI_PAGE_INSTFILES
+          !define MUI_FINISHPAGE_RUN "$INSTDIR\photo_transfer_gui.exe"
+          !define MUI_FINISHPAGE_RUN_TEXT "Launch Photo Transfer now"
           !insertmacro MUI_PAGE_FINISH
           
           !insertmacro MUI_UNPAGE_CONFIRM
@@ -274,9 +276,17 @@ jobs:
             SetOutPath "$INSTDIR"
             File /r "build\Release\*.*"
             
+            # Create Start Menu shortcuts (All Users)
             CreateDirectory "$SMPROGRAMS\Photo Transfer"
-            CreateShortcut "$SMPROGRAMS\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe"
-            CreateShortcut "$DESKTOP\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe"
+            CreateShortcut "$SMPROGRAMS\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
+            CreateShortcut "$SMPROGRAMS\Photo Transfer\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+            
+            # Create Desktop shortcut
+            CreateShortcut "$DESKTOP\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
+            
+            # Create Start Menu shortcut (Current User) as backup
+            CreateDirectory "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer"
+            CreateShortcut "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
             
             WriteUninstaller "$INSTDIR\Uninstall.exe"
             
@@ -284,11 +294,13 @@ jobs:
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "UninstallString" "$INSTDIR\Uninstall.exe"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayVersion" "1.0.0"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "Publisher" "Photo Transfer"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayIcon" "$INSTDIR\photo_transfer_gui.exe"
           SectionEnd
           
           Section "Uninstall"
             RMDir /r "$INSTDIR"
             RMDir /r "$SMPROGRAMS\Photo Transfer"
+            RMDir /r "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer"
             Delete "$DESKTOP\Photo Transfer.lnk"
             DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer"
           SectionEnd
@@ -341,7 +353,8 @@ jobs:
             
             ### Windows
             - **Recommended**: Download `PhotoTransfer-1.0.0-Windows-Setup.exe` - Double-click to install
-            - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run
+            - After installation, the app will launch automatically (or check desktop/Start menu)
+            - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run `photo_transfer_gui.exe`
             
             ### macOS
             - Download `PhotoTransfer-1.0.0-macOS.dmg`
