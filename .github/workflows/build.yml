@@ -186,7 +186,7 @@ jobs:
             mv "$APP_BUNDLE" "Photo Transfer.app"
           fi
           
-          # Remove quarantine attributes to prevent Gatekeeper warning
+          # Remove quarantine attributes from app bundle
           xattr -cr "Photo Transfer.app"
           
           # Create DMG with drag-to-Applications
@@ -194,6 +194,30 @@ jobs:
           cp -R "Photo Transfer.app" dmg_contents/
           ln -s /Applications dmg_contents/Applications
           
+          # Create DMG
+          hdiutil create -volname "Photo Transfer" \
+            -srcfolder dmg_contents \
+            -ov -format UDZO \
+            PhotoTransfer-1.0.0-macOS.dmg
+          
+          # Remove quarantine from DMG itself (though it will be re-added on download)
+          xattr -cr PhotoTransfer-1.0.0-macOS.dmg 2>/dev/null || true
+          
+          # Create a README.txt inside DMG with instructions
+          printf '%s\n' 'Photo Transfer - Installation Instructions' > dmg_contents/README.txt
+          printf '%s\n' '' >> dmg_contents/README.txt
+          printf '%s\n' '1. Drag "Photo Transfer" to the Applications folder' >> dmg_contents/README.txt
+          printf '%s\n' '' >> dmg_contents/README.txt
+          printf '%s\n' '2. If you see "damaged" error when opening:' >> dmg_contents/README.txt
+          printf '%s\n' '   - Right-click "Photo Transfer" app → Open (first time only)' >> dmg_contents/README.txt
+          printf '%s\n' '   - OR run in Terminal: xattr -cr "/Applications/Photo Transfer.app"' >> dmg_contents/README.txt
+          printf '%s\n' '' >> dmg_contents/README.txt
+          printf '%s\n' '3. Open Photo Transfer from Applications folder' >> dmg_contents/README.txt
+          printf '%s\n' '' >> dmg_contents/README.txt
+          printf '%s\n' 'Note: This app is not signed with an Apple Developer certificate.' >> dmg_contents/README.txt
+          printf '%s\n' 'Gatekeeper will warn you on first launch - this is normal for unsigned apps.' >> dmg_contents/README.txt
+          
+          # Recreate DMG with README
           hdiutil create -volname "Photo Transfer" \
             -srcfolder dmg_contents \
             -ov -format UDZO \
@@ -357,10 +381,13 @@ jobs:
             - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run `photo_transfer_gui.exe`
             
             ### macOS
-            - Download `PhotoTransfer-1.0.0-macOS.dmg`
-            - Double-click to open, drag "Photo Transfer" to Applications
-            - **If you see "damaged" error**: Right-click the app > Open (first time only)
-            - Or run in Terminal: `xattr -cr "/Applications/Photo Transfer.app"`
+            - Download `PhotoTransfer-1.0.0-macOS.dmg` and open it
+            - Drag "Photo Transfer" to Applications folder
+            - **IMPORTANT - First Launch**: macOS will block the app (not signed)
+            - **Solution**: Right-click "Photo Transfer" in Applications → **Open** (first time only)
+            - Alternative: Open Terminal and run: `xattr -cr "/Applications/Photo Transfer.app"`
+            - After first launch, you can double-click normally
+            - See README.txt in the DMG for detailed instructions
             
             ### Linux
             - Download `PhotoTransfer-1.0.0-Linux.AppImage`
