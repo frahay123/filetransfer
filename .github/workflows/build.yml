@@ -250,6 +250,25 @@ jobs:
         run: |
           choco install nsis -y
       
+      - name: Download Apple Mobile Device Support
+        shell: pwsh
+        run: |
+          # Download iTunes installer (contains Apple Mobile Device Support)
+          $iTunesUrl = "https://www.apple.com/itunes/download/win64"
+          $iTunesInstaller = "iTunes64Setup.exe"
+          
+          # Create drivers folder
+          New-Item -ItemType Directory -Force -Path "drivers"
+          
+          # Download iTunes (we'll extract just the drivers)
+          Write-Host "Downloading iTunes for Apple Mobile Device Support..."
+          try {
+            Invoke-WebRequest -Uri $iTunesUrl -OutFile "drivers/$iTunesInstaller" -UseBasicParsing
+            Write-Host "Downloaded iTunes installer"
+          } catch {
+            Write-Host "Could not download iTunes - iOS support will require manual iTunes installation"
+          }
+      
       - name: Build
         run: |
           mkdir build
@@ -272,9 +291,10 @@ jobs:
       - name: Create Installer
         shell: pwsh
         run: |
-          # Create NSIS installer script
+          # Create NSIS installer script with iOS driver support
           @'
           !include "MUI2.nsh"
+          !include "Sections.nsh"
           
           Name "Photo Transfer"
           OutFile "PhotoTransfer-1.0.0-Windows-Setup.exe"
@@ -284,7 +304,11 @@ jobs:
           !define MUI_ABORTWARNING
           !define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
           
+          ; Welcome page with iOS notice
+          !define MUI_WELCOMEPAGE_TEXT "This wizard will install Photo Transfer on your computer.$\r$\n$\r$\nPhoto Transfer supports both Android and iOS devices.$\r$\n$\r$\nFor iPhone/iPad support, iTunes must be installed (for Apple USB drivers).$\r$\n$\r$\nClick Next to continue."
+          
           !insertmacro MUI_PAGE_WELCOME
+          !insertmacro MUI_PAGE_COMPONENTS
           !insertmacro MUI_PAGE_DIRECTORY
           !insertmacro MUI_PAGE_INSTFILES
           !define MUI_FINISHPAGE_RUN "$INSTDIR\photo_transfer_gui.exe"
@@ -296,21 +320,18 @@ jobs:
           
           !insertmacro MUI_LANGUAGE "English"
           
-          Section "Install"
+          Section "Photo Transfer (required)" SecMain
+            SectionIn RO
             SetOutPath "$INSTDIR"
             File /r "build\Release\*.*"
             
-            # Create Start Menu shortcuts (All Users)
+            ; Create Start Menu shortcuts
             CreateDirectory "$SMPROGRAMS\Photo Transfer"
             CreateShortcut "$SMPROGRAMS\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
             CreateShortcut "$SMPROGRAMS\Photo Transfer\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
             
-            # Create Desktop shortcut
+            ; Create Desktop shortcut
             CreateShortcut "$DESKTOP\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
-            
-            # Create Start Menu shortcut (Current User) as backup
-            CreateDirectory "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer"
-            CreateShortcut "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
             
             WriteUninstaller "$INSTDIR\Uninstall.exe"
             
@@ -321,13 +342,36 @@ jobs:
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayIcon" "$INSTDIR\photo_transfer_gui.exe"
           SectionEnd
           
+          Section "iOS Support (iTunes)" SecIOS
+            ; Check if Apple Mobile Device Service exists
+            ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\Apple Mobile Device Service" "ImagePath"
+            StrCmp $0 "" 0 ios_installed
+            
+            ; iTunes not installed - offer to download
+            MessageBox MB_YESNO "iTunes is required for iPhone/iPad support.$\r$\n$\r$\nWould you like to open the iTunes download page?" IDNO skip_itunes
+            ExecShell "open" "https://www.apple.com/itunes/download/win64"
+            MessageBox MB_OK "After installing iTunes, restart Photo Transfer to detect iOS devices."
+            skip_itunes:
+            Goto ios_done
+            
+            ios_installed:
+            MessageBox MB_OK "iTunes is already installed. iOS devices are supported!"
+            
+            ios_done:
+          SectionEnd
+          
           Section "Uninstall"
             RMDir /r "$INSTDIR"
             RMDir /r "$SMPROGRAMS\Photo Transfer"
-            RMDir /r "$APPDATA\Microsoft\Windows\Start Menu\Programs\Photo Transfer"
             Delete "$DESKTOP\Photo Transfer.lnk"
             DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer"
           SectionEnd
+          
+          ; Section descriptions
+          !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+            !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Install Photo Transfer application (required)"
+            !insertmacro MUI_DESCRIPTION_TEXT ${SecIOS} "Check/install iTunes for iPhone and iPad support"
+          !insertmacro MUI_FUNCTION_DESCRIPTION_END
           '@ | Out-File -FilePath "installer.nsi" -Encoding ASCII
           
           # Run NSIS
@@ -377,8 +421,10 @@ jobs:
             
             ### Windows
             - **Recommended**: Download `PhotoTransfer-1.0.0-Windows-Setup.exe` - Double-click to install
+            - The installer includes an option to set up iOS support (requires iTunes)
+            - **For iPhone/iPad**: Install iTunes first, or select "iOS Support" during installation
             - After installation, the app will launch automatically (or check desktop/Start menu)
-            - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run `photo_transfer_gui.exe`
+            - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run
             
             ### macOS
             - Download `PhotoTransfer-1.0.0-macOS.dmg` and open it
@@ -386,8 +432,7 @@ jobs:
             - **IMPORTANT - First Launch**: macOS will block the app (not signed)
             - **Solution**: Right-click "Photo Transfer" in Applications → **Open** (first time only)
             - Alternative: Open Terminal and run: `xattr -cr "/Applications/Photo Transfer.app"`
-            - After first launch, you can double-click normally
-            - See README.txt in the DMG for detailed instructions
+            - iOS and Android devices are fully supported on macOS
             
             ### Linux
             - Download `PhotoTransfer-1.0.0-Linux.AppImage`
