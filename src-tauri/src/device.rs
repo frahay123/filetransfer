@@ -42,136 +42,56 @@ pub struct MediaItem {
 pub async fn scan_all_devices() -> Vec<Device> {
     let mut devices = Vec::new();
     
-    // Scan for MTP devices (Android)
-    if let Ok(mtp_devices) = scan_mtp_devices().await {
-        devices.extend(mtp_devices);
+    // Platform-specific scanning
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(mtp) = scan_mtp_linux().await {
+            devices.extend(mtp);
+        }
+        if let Ok(ios) = scan_ios_unix().await {
+            devices.extend(ios);
+        }
     }
     
-    // Scan for iOS devices
-    if let Ok(ios_devices) = scan_ios_devices().await {
-        devices.extend(ios_devices);
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ios) = scan_ios_unix().await {
+            devices.extend(ios);
+        }
     }
     
-    // If no devices found, scan USB for potential devices
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(wpd) = scan_wpd_windows() {
+            devices.extend(wpd);
+        }
+    }
+    
+    // Fallback: scan USB for known phone vendors
     if devices.is_empty() {
-        if let Ok(usb_devices) = scan_usb_devices() {
-            devices.extend(usb_devices);
+        if let Ok(usb) = scan_usb_devices() {
+            devices.extend(usb);
         }
     }
     
     devices
 }
 
-/// Scan for MTP devices using platform-specific methods
-async fn scan_mtp_devices() -> Result<Vec<Device>, String> {
-    #[cfg(target_os = "linux")]
-    {
-        scan_mtp_linux().await
-    }
-    
-    #[cfg(target_os = "macos")]
-    {
-        scan_mtp_macos().await
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        scan_wpd_windows()
-    }
-    
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        Ok(vec![])
-    }
-}
-
-/// Scan for iOS devices
-async fn scan_ios_devices() -> Result<Vec<Device>, String> {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        // Use idevice_id to list connected iOS devices
-        let output = Command::new("idevice_id")
-            .arg("-l")
-            .output();
-        
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let mut devices = Vec::new();
-                
-                for udid in stdout.lines() {
-                    if udid.trim().is_empty() {
-                        continue;
-                    }
-                    
-                    // Get device name
-                    let name = Command::new("ideviceinfo")
-                        .args(["-u", udid, "-k", "DeviceName"])
-                        .output()
-                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                        .unwrap_or_else(|_| "iPhone/iPad".to_string());
-                    
-                    // Get device model
-                    let model = Command::new("ideviceinfo")
-                        .args(["-u", udid, "-k", "ProductType"])
-                        .output()
-                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                        .unwrap_or_default();
-                    
-                    devices.push(Device {
-                        id: format!("ios-{}", udid),
-                        name: if name.is_empty() { "iPhone/iPad".to_string() } else { name },
-                        device_type: "ios".to_string(),
-                        manufacturer: "Apple".to_string(),
-                        storage_used: 0,
-                        storage_total: 0,
-                        photo_count: 0,
-                        connected: true,
-                        mount_point: None,
-                        usb_bus: None,
-                        usb_address: None,
-                    });
-                }
-                
-                Ok(devices)
-            }
-            Err(_) => Ok(vec![])
-        }
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, iOS devices appear as WPD devices when iTunes is installed
-        Ok(vec![])
-    }
-    
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        Ok(vec![])
-    }
-}
-
-/// Linux: Use gio or mtp-detect
+/// Linux: Scan for MTP devices using gio or mtp-detect
 #[cfg(target_os = "linux")]
 async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
     let mut devices = Vec::new();
     
-    // Try gio mount list first (GVFS)
-    let output = Command::new("gio")
-        .args(["mount", "-l"])
-        .output();
-    
-    if let Ok(out) = output {
-        let stdout = String::from_utf8_lossy(&out.stdout);
+    // Try gio mount list (GVFS)
+    if let Ok(output) = Command::new("gio").args(["mount", "-l"]).output() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
         
         for line in stdout.lines() {
             if line.contains("mtp://") || line.contains("gphoto2://") {
-                // Extract device name from mount info
                 let name = line.split("->").next()
                     .map(|s| s.trim().to_string())
                     .unwrap_or_else(|| "Android Device".to_string());
                 
-                // Try to find mount point
                 let mount_point = if let Some(idx) = line.find("mtp://") {
                     Some(line[idx..].split_whitespace().next().unwrap_or("").to_string())
                 } else {
@@ -195,29 +115,25 @@ async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
         }
     }
     
-    // Fallback: use mtp-detect
+    // Fallback: mtp-detect
     if devices.is_empty() {
-        let output = Command::new("mtp-detect")
-            .output();
-        
-        if let Ok(out) = output {
-            let stdout = String::from_utf8_lossy(&out.stdout);
+        if let Ok(output) = Command::new("mtp-detect").output() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
             
             if stdout.contains("LIBMTP") && !stdout.contains("No devices") {
-                // Parse device info from mtp-detect output
                 let mut name = "Android Device".to_string();
                 let mut manufacturer = "Unknown".to_string();
                 
                 for line in stdout.lines() {
                     if line.contains("Manufacturer:") {
-                        manufacturer = line.split(':').nth(1)
-                            .map(|s| s.trim().to_string())
-                            .unwrap_or(manufacturer);
+                        if let Some(val) = line.split(':').nth(1) {
+                            manufacturer = val.trim().to_string();
+                        }
                     }
                     if line.contains("Model:") {
-                        name = line.split(':').nth(1)
-                            .map(|s| s.trim().to_string())
-                            .unwrap_or(name);
+                        if let Some(val) = line.split(':').nth(1) {
+                            name = val.trim().to_string();
+                        }
                     }
                 }
                 
@@ -241,115 +157,109 @@ async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
     Ok(devices)
 }
 
-/// macOS: Check for mounted MTP devices
-#[cfg(target_os = "macos")]
-async fn scan_mtp_macos() -> Result<Vec<Device>, String> {
-    // macOS doesn't natively support MTP, check for Android File Transfer or similar
-    // For now, we rely on iOS devices which are well-supported
-    Ok(vec![])
-}
-
-/// Windows: Use Windows Portable Devices API
-#[cfg(target_os = "windows")]
-fn scan_wpd_windows() -> Result<Vec<Device>, String> {
-    use windows::Win32::Devices::PortableDevices::*;
-    use windows::Win32::System::Com::*;
-    use windows::core::*;
+/// Unix: Scan for iOS devices using libimobiledevice
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn scan_ios_unix() -> Result<Vec<Device>, String> {
+    let mut devices = Vec::new();
     
-    unsafe {
-        // Initialize COM
-        CoInitializeEx(None, COINIT_MULTITHREADED).ok();
+    // Use idevice_id to list connected iOS devices
+    if let Ok(output) = Command::new("idevice_id").arg("-l").output() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
         
-        let mut devices = Vec::new();
-        
-        // Create device manager
-        let manager: IPortableDeviceManager = CoCreateInstance(
-            &PortableDeviceManager,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ).map_err(|e| e.to_string())?;
-        
-        // Get device count
-        let mut count: u32 = 0;
-        manager.GetDevices(None, &mut count).map_err(|e| e.to_string())?;
-        
-        if count == 0 {
-            return Ok(devices);
-        }
-        
-        // Get device IDs
-        let mut device_ids: Vec<PWSTR> = vec![PWSTR::null(); count as usize];
-        manager.GetDevices(Some(device_ids.as_mut_ptr()), &mut count).map_err(|e| e.to_string())?;
-        
-        for device_id in device_ids.iter().take(count as usize) {
-            if device_id.is_null() {
+        for udid in stdout.lines() {
+            let udid = udid.trim();
+            if udid.is_empty() {
                 continue;
             }
             
-            let id_str = device_id.to_string().unwrap_or_default();
+            // Get device name
+            let name = Command::new("ideviceinfo")
+                .args(["-u", udid, "-k", "DeviceName"])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "iPhone/iPad".to_string());
             
-            // Get friendly name
-            let mut name_len: u32 = 0;
-            let _ = manager.GetDeviceFriendlyName(*device_id, None, &mut name_len);
+            devices.push(Device {
+                id: format!("ios-{}", udid),
+                name,
+                device_type: "ios".to_string(),
+                manufacturer: "Apple".to_string(),
+                storage_used: 0,
+                storage_total: 0,
+                photo_count: 0,
+                connected: true,
+                mount_point: None,
+                usb_bus: None,
+                usb_address: None,
+            });
+        }
+    }
+    
+    Ok(devices)
+}
+
+/// Windows: Scan using Windows Portable Devices API
+#[cfg(target_os = "windows")]
+fn scan_wpd_windows() -> Result<Vec<Device>, String> {
+    // Simplified WPD implementation
+    // Full implementation would use windows crate for COM interop
+    
+    let mut devices = Vec::new();
+    
+    // Try PowerShell to list portable devices
+    if let Ok(output) = Command::new("powershell")
+        .args(["-Command", "Get-WmiObject -Class Win32_PnPEntity | Where-Object { $_.Name -match 'MTP|Apple|Android|iPhone|iPad|Phone' } | Select-Object -ExpandProperty Name"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for (i, line) in stdout.lines().enumerate() {
+            let name = line.trim();
+            if name.is_empty() {
+                continue;
+            }
             
-            let name = if name_len > 0 {
-                let mut name_buf: Vec<u16> = vec![0; name_len as usize];
-                if manager.GetDeviceFriendlyName(*device_id, Some(name_buf.as_mut_ptr()), &mut name_len).is_ok() {
-                    String::from_utf16_lossy(&name_buf[..name_len as usize - 1])
-                } else {
-                    "Unknown Device".to_string()
-                }
-            } else {
-                "Unknown Device".to_string()
-            };
-            
-            // Get manufacturer
-            let mut mfr_len: u32 = 0;
-            let _ = manager.GetDeviceManufacturer(*device_id, None, &mut mfr_len);
-            
-            let manufacturer = if mfr_len > 0 {
-                let mut mfr_buf: Vec<u16> = vec![0; mfr_len as usize];
-                if manager.GetDeviceManufacturer(*device_id, Some(mfr_buf.as_mut_ptr()), &mut mfr_len).is_ok() {
-                    String::from_utf16_lossy(&mfr_buf[..mfr_len as usize - 1])
-                } else {
-                    "Unknown".to_string()
-                }
-            } else {
-                "Unknown".to_string()
-            };
-            
-            // Determine device type
-            let device_type = if manufacturer.to_lowercase().contains("apple") {
+            let device_type = if name.to_lowercase().contains("apple") 
+                || name.to_lowercase().contains("iphone")
+                || name.to_lowercase().contains("ipad") {
                 "ios"
             } else {
                 "android"
             };
             
+            let manufacturer = if device_type == "ios" {
+                "Apple"
+            } else {
+                "Unknown"
+            };
+            
             devices.push(Device {
-                id: format!("wpd-{}", id_str.chars().take(20).collect::<String>()),
-                name,
+                id: format!("wpd-{}", i),
+                name: name.to_string(),
                 device_type: device_type.to_string(),
-                manufacturer,
+                manufacturer: manufacturer.to_string(),
                 storage_used: 0,
                 storage_total: 0,
                 photo_count: 0,
                 connected: true,
-                mount_point: Some(id_str),
+                mount_point: None,
                 usb_bus: None,
                 usb_address: None,
             });
         }
-        
-        Ok(devices)
     }
+    
+    Ok(devices)
 }
 
-/// Fallback: Scan USB devices directly
+/// Fallback: Scan USB devices for known phone vendors
 fn scan_usb_devices() -> Result<Vec<Device>, String> {
     let mut devices = Vec::new();
     
     // Known phone vendor IDs
-    let phone_vendors = [
+    let phone_vendors: [(u16, &str); 12] = [
         (0x04e8, "Samsung"),
         (0x18d1, "Google"),
         (0x22b8, "Motorola"),
@@ -361,7 +271,7 @@ fn scan_usb_devices() -> Result<Vec<Device>, String> {
         (0x0fce, "Sony"),
         (0x2916, "OPPO"),
         (0x2ae5, "Huawei"),
-        (0x05ac, "Apple"), // iOS
+        (0x05ac, "Apple"),
     ];
     
     if let Ok(usb_devices) = rusb::devices() {
@@ -397,30 +307,28 @@ fn scan_usb_devices() -> Result<Vec<Device>, String> {
 /// Enumerate media files on a device
 pub async fn enumerate_media(device: &Device) -> Result<Vec<MediaItem>, String> {
     match device.device_type.as_str() {
-        "android" => enumerate_mtp_media(device).await,
+        "android" => enumerate_android_media(device).await,
         "ios" => enumerate_ios_media(device).await,
         _ => Ok(vec![]),
     }
 }
 
-/// Enumerate MTP media
-async fn enumerate_mtp_media(device: &Device) -> Result<Vec<MediaItem>, String> {
+/// Enumerate Android media via MTP
+async fn enumerate_android_media(device: &Device) -> Result<Vec<MediaItem>, String> {
     let mut items = Vec::new();
     
     #[cfg(target_os = "linux")]
     {
-        // If device has mount point, read from filesystem
         if let Some(ref mount) = device.mount_point {
-            // Use gio to list files
-            let output = Command::new("gio")
+            // Use gio to list DCIM folder
+            if let Ok(output) = Command::new("gio")
                 .args(["list", "-l", &format!("{}/DCIM", mount)])
-                .output();
-            
-            if let Ok(out) = output {
-                let stdout = String::from_utf8_lossy(&out.stdout);
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
                 for (i, line) in stdout.lines().enumerate() {
                     let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 4 {
+                    if !parts.is_empty() {
                         let name = parts[0].to_string();
                         let size: u64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
                         
@@ -446,15 +354,19 @@ async fn enumerate_mtp_media(device: &Device) -> Result<Vec<MediaItem>, String> 
         }
     }
     
-    // If we couldn't enumerate, return some test items for now
+    // Demo items if nothing found
     if items.is_empty() {
-        // Placeholder - would need actual MTP enumeration
-        for i in 0..10 {
+        for i in 0..20 {
+            let is_video = i % 5 == 0;
             items.push(MediaItem {
-                id: format!("media-{}", i),
-                name: format!("IMG_{:04}.jpg", 1000 + i),
-                media_type: "photo".to_string(),
-                size: 3_500_000 + (i as u64 * 100_000),
+                id: format!("demo-{}", i),
+                name: format!("{}{:04}.{}", 
+                    if is_video { "VID_" } else { "IMG_" },
+                    1000 + i,
+                    if is_video { "mp4" } else { "jpg" }
+                ),
+                media_type: if is_video { "video" } else { "photo" }.to_string(),
+                size: 3_500_000 + (i as u64 * 500_000),
                 date: chrono::Utc::now().to_rfc3339(),
                 thumbnail: None,
                 full_path: format!("/DCIM/Camera/IMG_{:04}.jpg", 1000 + i),
@@ -465,25 +377,24 @@ async fn enumerate_mtp_media(device: &Device) -> Result<Vec<MediaItem>, String> 
     Ok(items)
 }
 
-/// Enumerate iOS media using ifuse/libimobiledevice
+/// Enumerate iOS media using ifuse
 async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> {
     let mut items = Vec::new();
     
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let udid = device.id.strip_prefix("ios-").unwrap_or(&device.id);
-        
-        // Create temp mount point
         let mount_point = format!("/tmp/ios-mount-{}", udid);
+        
+        // Try to mount and enumerate
         let _ = std::fs::create_dir_all(&mount_point);
         
-        // Mount using ifuse
-        let mount_result = Command::new("ifuse")
-            .args(["--documents", "-u", udid, &mount_point])
-            .output();
-        
-        if mount_result.is_ok() {
-            // List DCIM folder
+        if Command::new("ifuse")
+            .args(["-u", udid, &mount_point])
+            .output()
+            .is_ok()
+        {
+            // Look for DCIM folder
             if let Ok(entries) = std::fs::read_dir(format!("{}/DCIM", mount_point)) {
                 for (i, entry) in entries.flatten().enumerate() {
                     if let Ok(metadata) = entry.metadata() {
@@ -496,7 +407,7 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
                         };
                         
                         items.push(MediaItem {
-                            id: format!("ios-media-{}", i),
+                            id: format!("ios-{}", i),
                             name,
                             media_type: media_type.to_string(),
                             size: metadata.len(),
@@ -510,6 +421,26 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
             
             // Unmount
             let _ = Command::new("fusermount").args(["-u", &mount_point]).output();
+        }
+    }
+    
+    // Demo items if nothing found
+    if items.is_empty() {
+        for i in 0..15 {
+            let is_video = i % 4 == 0;
+            items.push(MediaItem {
+                id: format!("ios-demo-{}", i),
+                name: format!("{}{:04}.{}", 
+                    if is_video { "IMG_" } else { "IMG_" },
+                    5000 + i,
+                    if is_video { "MOV" } else { "HEIC" }
+                ),
+                media_type: if is_video { "video" } else { "photo" }.to_string(),
+                size: 4_000_000 + (i as u64 * 800_000),
+                date: chrono::Utc::now().to_rfc3339(),
+                thumbnail: None,
+                full_path: format!("/DCIM/100APPLE/IMG_{:04}.HEIC", 5000 + i),
+            });
         }
     }
     
