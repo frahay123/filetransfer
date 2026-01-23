@@ -307,6 +307,15 @@ jobs:
           ; Welcome page with iOS notice
           !define MUI_WELCOMEPAGE_TEXT "This wizard will install Photo Transfer on your computer.$\r$\n$\r$\nPhoto Transfer supports both Android and iOS devices.$\r$\n$\r$\nFor iPhone/iPad support, iTunes must be installed (for Apple USB drivers).$\r$\n$\r$\nClick Next to continue."
           
+          ; Function to close running instances before install
+          Function .onInit
+            ; Try to close any running instances of the app
+            ExecWait 'taskkill /F /IM photo_transfer_gui.exe' $0
+            ExecWait 'taskkill /F /IM photo_transfer.exe' $0
+            ; Wait for processes to fully close
+            Sleep 1000
+          FunctionEnd
+          
           !insertmacro MUI_PAGE_WELCOME
           !insertmacro MUI_PAGE_COMPONENTS
           !insertmacro MUI_PAGE_DIRECTORY
