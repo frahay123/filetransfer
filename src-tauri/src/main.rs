@@ -40,8 +40,10 @@ async fn scan_devices(state: State<'_, AppState>) -> Result<Vec<Device>, String>
     let devices = device::scan_all_devices().await;
     
     // Store in state
-    let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
-    *state_devices = devices.clone();
+    {
+        let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
+        *state_devices = devices.clone();
+    }
     
     log::info!("Found {} devices", devices.len());
     Ok(devices)
@@ -52,15 +54,16 @@ async fn scan_devices(state: State<'_, AppState>) -> Result<Vec<Device>, String>
 async fn connect_device(device_id: String, state: State<'_, AppState>) -> Result<bool, String> {
     log::info!("Connecting to device: {}", device_id);
     
-    let devices = state.devices.lock().map_err(|e| e.to_string())?;
-    let device = devices.iter().find(|d| d.id == device_id);
+    let device_exists = {
+        let devices = state.devices.lock().map_err(|e| e.to_string())?;
+        devices.iter().any(|d| d.id == device_id)
+    };
     
-    match device {
-        Some(d) => {
-            log::info!("Connected to: {}", d.name);
-            Ok(true)
-        }
-        None => Err("Device not found".to_string()),
+    if device_exists {
+        log::info!("Connected to device: {}", device_id);
+        Ok(true)
+    } else {
+        Err("Device not found".to_string())
     }
 }
 
@@ -77,13 +80,16 @@ async fn get_media_items(device_id: String, state: State<'_, AppState>) -> Resul
         }
     }
     
-    // Get device info
-    let devices = state.devices.lock().map_err(|e| e.to_string())?;
-    let device = devices.iter().find(|d| d.id == device_id)
-        .ok_or("Device not found")?;
+    // Get device info - clone it so we can drop the lock
+    let device = {
+        let devices = state.devices.lock().map_err(|e| e.to_string())?;
+        devices.iter().find(|d| d.id == device_id).cloned()
+    };
     
-    // Enumerate media
-    let items = device::enumerate_media(device).await?;
+    let device = device.ok_or("Device not found")?;
+    
+    // Enumerate media (no lock held here)
+    let items = device::enumerate_media(&device).await?;
     
     // Cache results
     {
@@ -114,15 +120,19 @@ async fn transfer_files(
     let dest_path = PathBuf::from(shellexpand::tilde(&destination).to_string());
     fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
 
-    // Get device and media items
-    let devices = state.devices.lock().map_err(|e| e.to_string())?;
-    let device = devices.iter().find(|d| d.id == device_id)
-        .ok_or("Device not found")?.clone();
-    drop(devices);
+    // Get device - clone it so we can drop the lock
+    let device = {
+        let devices = state.devices.lock().map_err(|e| e.to_string())?;
+        devices.iter().find(|d| d.id == device_id).cloned()
+    };
+    let device = device.ok_or("Device not found")?;
     
-    let cache = state.media_cache.lock().map_err(|e| e.to_string())?;
-    let all_items = cache.get(&device_id).ok_or("No media cached")?.clone();
-    drop(cache);
+    // Get media items - clone them so we can drop the lock
+    let all_items = {
+        let cache = state.media_cache.lock().map_err(|e| e.to_string())?;
+        cache.get(&device_id).cloned()
+    };
+    let all_items = all_items.ok_or("No media cached")?;
     
     // Filter to selected items
     let items: Vec<_> = all_items.iter()

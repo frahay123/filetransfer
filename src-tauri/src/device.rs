@@ -315,6 +315,7 @@ pub async fn enumerate_media(device: &Device) -> Result<Vec<MediaItem>, String> 
 
 /// Enumerate Android media via MTP
 async fn enumerate_android_media(device: &Device) -> Result<Vec<MediaItem>, String> {
+    let _ = device; // Used conditionally per platform
     let mut items = Vec::new();
     
     #[cfg(target_os = "linux")]
