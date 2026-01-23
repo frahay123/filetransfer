@@ -1,0 +1,53 @@
+[package]
+name = "photo-transfer"
+version = "2.0.0"
+description = "Fast photo transfer from phone to computer"
+authors = ["Photo Transfer"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = ["shell-open", "dialog-open", "dialog-save", "path-all", "fs-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+hex = "0.4"
+chrono = "0.4"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2"
+dirs = "5"
+shellexpand = "3"
+open = "5"
+image = { version = "0.24", default-features = false, features = ["jpeg", "png"] }
+base64 = "0.21"
+log = "0.4"
+env_logger = "0.10"
+
+# USB/MTP support
+rusb = "0.9"
+
+# Platform-specific
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = [
+    "Win32_Devices_PortableDevices",
+    "Win32_System_Com", 
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_Storage_FileSystem",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true

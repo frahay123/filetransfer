@@ -1,44 +1,34 @@
-# Build directories
-build/
-build-*/
-cmake-build-*/
+# Dependencies
+node_modules/
 
-# IDE files
-.idea/
+# Build outputs
+dist/
+src-tauri/target/
+
+# Old C++ build
+build/
+*.o
+*.d
+
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
+.cursor/
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Compiled files
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.dylib
-*.a
-
-# Qt generated files
-moc_*.cpp
-ui_*.h
-qrc_*.cpp
-*_autogen/
-
-# Package files
-*.AppImage
-*.dmg
-*.zip
-*.tar.gz
-*.deb
-*.rpm
+# Environment
+.env
+.env.local
+.env.*.local
 
 # Logs
 *.log
+npm-debug.log*
 
-# Database files (user data)
-*.db
-
-# Config files (user data)
-.photo_transfer.db
+# Tauri
+src-tauri/WixTools/

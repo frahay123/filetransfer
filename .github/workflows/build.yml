@@ -2,449 +2,117 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-22.04
+  build-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: linux
+          - platform: macos-14
+            target: macos
+          - platform: windows-latest
+            target: windows
+
+    runs-on: ${{ matrix.platform }}
+    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+        
+      - name: Install Linux dependencies
+        if: matrix.target == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential cmake pkg-config \
-            libmtp-dev libfuse3-dev libsqlite3-dev libssl-dev \
-            libimobiledevice-dev libplist-dev usbmuxd \
-            qt6-base-dev qt6-base-dev-tools qt6-tools-dev \
-            libgl1-mesa-dev libxkbcommon-dev \
-            wget fuse libfuse2 imagemagick
-      
-      - name: Build CLI
+            libwebkit2gtk-4.0-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libusb-1.0-0-dev \
+            libmtp-dev \
+            libimobiledevice-dev \
+            ifuse \
+            patchelf
+            
+      - name: Install macOS dependencies
+        if: matrix.target == 'macos'
         run: |
-          mkdir build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF
-          make -j$(nproc)
-      
-      - name: Build GUI
-        run: |
-          mkdir build-gui && cd build-gui
-          export Qt6_DIR=/usr/lib/x86_64-linux-gnu/cmake/Qt6
-          export CMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON \
-            -DQt6_DIR=$Qt6_DIR \
-            -DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH
-          cmake --build . --target photo_transfer -- -j$(nproc)
-          cmake --build . --target photo_transfer_gui -- -j$(nproc)
-      
-      - name: Create AppImage
-        run: |
-          cd build-gui
+          brew install libmtp libimobiledevice libusb
           
-          # Check if GUI was built
-          if [ ! -f photo_transfer_gui ]; then
-            echo "ERROR: photo_transfer_gui not built!"
-            ls -la
-            exit 1
-          fi
-          
-          # Create AppDir structure
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          
-          # Copy executables
-          cp photo_transfer AppDir/usr/bin/
-          cp photo_transfer_gui AppDir/usr/bin/
-          
-          # Create a simple icon (256x256 PNG) - blue gradient square
-          convert -size 256x256 gradient:#4A90D9-#2E5A87 \
-            AppDir/usr/share/icons/hicolor/256x256/apps/photo-transfer.png
-          
-          # Create desktop file using echo (avoids YAML parsing issues)
-          echo "[Desktop Entry]" > AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Type=Application" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Name=Photo Transfer" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Comment=Transfer photos from mobile devices" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Exec=photo_transfer_gui" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Icon=photo-transfer" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Categories=Utility;Graphics;" >> AppDir/usr/share/applications/photo-transfer.desktop
-          echo "Terminal=false" >> AppDir/usr/share/applications/photo-transfer.desktop
-          
-          # Copy icon to root for linuxdeploy
-          cp AppDir/usr/share/icons/hicolor/256x256/apps/photo-transfer.png AppDir/
-          
-          # Download linuxdeploy
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
-          chmod +x linuxdeploy*.AppImage
-          
-          # Set Qt plugin path
-          export QMAKE=/usr/lib/qt6/bin/qmake
-          export QT_SELECT=qt6
-          
-          # Build AppImage
-          ./linuxdeploy-x86_64.AppImage \
-            --appdir AppDir \
-            --icon-file AppDir/photo-transfer.png \
-            --desktop-file AppDir/usr/share/applications/photo-transfer.desktop \
-            --plugin qt \
-            --output appimage
-          
-          # Rename output
-          mv Photo_Transfer*.AppImage PhotoTransfer-1.0.0-Linux.AppImage 2>/dev/null || \
-          mv *.AppImage PhotoTransfer-1.0.0-Linux.AppImage 2>/dev/null || true
-          
-          # Verify
-          ls -la *.AppImage || echo "Warning: No AppImage created"
-      
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+      - name: Install npm dependencies
+        run: npm ci
+        
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: linux-build
-          path: |
-            build-gui/*.AppImage
-
-  build-macos:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install dependencies
-        run: |
-          brew install cmake libmtp libimobiledevice openssl@3 sqlite3 qt@6
-      
-      - name: Build
-        run: |
-          mkdir build && cd build
-          export PKG_CONFIG_PATH="$(brew --prefix libmtp)/lib/pkgconfig:$(brew --prefix libimobiledevice)/lib/pkgconfig:$PKG_CONFIG_PATH"
-          export LIBRARY_PATH="$(brew --prefix libmtp)/lib:$(brew --prefix libimobiledevice)/lib:$LIBRARY_PATH"
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_GUI=ON \
-            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3) \
-            -DQt6_DIR=$(brew --prefix qt@6)/lib/cmake/Qt6 \
-            -DCMAKE_LIBRARY_PATH="$(brew --prefix libmtp)/lib;$(brew --prefix libimobiledevice)/lib"
-          make -j$(sysctl -n hw.ncpu)
-      
-      - name: Create DMG
-        run: |
-          cd build
-          
-          # Use the Qt-generated .app bundle if it exists
-          if [ -d "photo_transfer_gui.app" ]; then
-            echo "Using Qt-generated app bundle"
-            APP_BUNDLE="photo_transfer_gui.app"
-          else
-            echo "Creating app bundle manually"
-            mkdir -p "Photo Transfer.app/Contents/MacOS"
-            mkdir -p "Photo Transfer.app/Contents/Resources"
-            APP_BUNDLE="Photo Transfer.app"
+          tagName: v__VERSION__
+          releaseName: 'Photo Transfer v__VERSION__'
+          releaseBody: |
+            ## 🚀 Photo Transfer v__VERSION__
             
-            if [ -f photo_transfer_gui ]; then
-              cp photo_transfer_gui "$APP_BUNDLE/Contents/MacOS/"
-            fi
-          fi
-          
-          # Copy CLI tool into the bundle
-          if [ -f photo_transfer ]; then
-            cp photo_transfer "$APP_BUNDLE/Contents/MacOS/"
-          fi
-          
-          # Create/update Info.plist
-          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' > "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '<plist version="1.0">' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '<dict>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>CFBundleExecutable</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <string>photo_transfer_gui</string>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>CFBundleIdentifier</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <string>com.phototransfer.app</string>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>CFBundleName</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <string>Photo Transfer</string>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>CFBundleVersion</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <string>1.0.0</string>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>CFBundlePackageType</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <string>APPL</string>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <key>NSHighResolutionCapable</key>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '    <true/>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '</dict>' >> "$APP_BUNDLE/Contents/Info.plist"
-          printf '%s\n' '</plist>' >> "$APP_BUNDLE/Contents/Info.plist"
-          
-          # Deploy Qt frameworks
-          $(brew --prefix qt@6)/bin/macdeployqt "$APP_BUNDLE" -verbose=2
-          
-          # Rename to final name if needed
-          if [ "$APP_BUNDLE" = "photo_transfer_gui.app" ]; then
-            mv "$APP_BUNDLE" "Photo Transfer.app"
-          fi
-          
-          # Remove quarantine attributes from app bundle
-          xattr -cr "Photo Transfer.app"
-          
-          # Create DMG with drag-to-Applications
-          mkdir -p dmg_contents
-          cp -R "Photo Transfer.app" dmg_contents/
-          ln -s /Applications dmg_contents/Applications
-          
-          # Create DMG
-          hdiutil create -volname "Photo Transfer" \
-            -srcfolder dmg_contents \
-            -ov -format UDZO \
-            PhotoTransfer-1.0.0-macOS.dmg
-          
-          # Remove quarantine from DMG itself (though it will be re-added on download)
-          xattr -cr PhotoTransfer-1.0.0-macOS.dmg 2>/dev/null || true
-          
-          # Create a README.txt inside DMG with instructions
-          printf '%s\n' 'Photo Transfer - Installation Instructions' > dmg_contents/README.txt
-          printf '%s\n' '' >> dmg_contents/README.txt
-          printf '%s\n' '1. Drag "Photo Transfer" to the Applications folder' >> dmg_contents/README.txt
-          printf '%s\n' '' >> dmg_contents/README.txt
-          printf '%s\n' '2. If you see "damaged" error when opening:' >> dmg_contents/README.txt
-          printf '%s\n' '   - Right-click "Photo Transfer" app → Open (first time only)' >> dmg_contents/README.txt
-          printf '%s\n' '   - OR run in Terminal: xattr -cr "/Applications/Photo Transfer.app"' >> dmg_contents/README.txt
-          printf '%s\n' '' >> dmg_contents/README.txt
-          printf '%s\n' '3. Open Photo Transfer from Applications folder' >> dmg_contents/README.txt
-          printf '%s\n' '' >> dmg_contents/README.txt
-          printf '%s\n' 'Note: This app is not signed with an Apple Developer certificate.' >> dmg_contents/README.txt
-          printf '%s\n' 'Gatekeeper will warn you on first launch - this is normal for unsigned apps.' >> dmg_contents/README.txt
-          
-          # Recreate DMG with README
-          hdiutil create -volname "Photo Transfer" \
-            -srcfolder dmg_contents \
-            -ov -format UDZO \
-            PhotoTransfer-1.0.0-macOS.dmg
-          
-          ls -la *.dmg
-      
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: build/*.dmg
-
-  build-windows:
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.6.*'
-          modules: 'qtimageformats'
-      
-      - name: Install vcpkg dependencies
-        run: |
-          vcpkg install sqlite3:x64-windows openssl:x64-windows
-      
-      - name: Install NSIS
-        run: |
-          choco install nsis -y
-      
-      - name: Download Apple Mobile Device Support
-        shell: pwsh
-        run: |
-          # Download iTunes installer (contains Apple Mobile Device Support)
-          $iTunesUrl = "https://www.apple.com/itunes/download/win64"
-          $iTunesInstaller = "iTunes64Setup.exe"
-          
-          # Create drivers folder
-          New-Item -ItemType Directory -Force -Path "drivers"
-          
-          # Download iTunes (we'll extract just the drivers)
-          Write-Host "Downloading iTunes for Apple Mobile Device Support..."
-          try {
-            Invoke-WebRequest -Uri $iTunesUrl -OutFile "drivers/$iTunesInstaller" -UseBasicParsing
-            Write-Host "Downloaded iTunes installer"
-          } catch {
-            Write-Host "Could not download iTunes - iOS support will require manual iTunes installation"
-          }
-      
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake .. `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DBUILD_GUI=ON `
-            -DENABLE_ANDROID=ON `
-            -DENABLE_IOS=OFF `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-          cmake --build . --config Release
-      
-      - name: Deploy Qt
-        run: |
-          cd build/Release
-          windeployqt photo_transfer_gui.exe --release --no-translations
-      
-      - name: Create Installer
-        shell: pwsh
-        run: |
-          # Create NSIS installer script with iOS driver support
-          @'
-          !include "MUI2.nsh"
-          !include "Sections.nsh"
-          
-          Name "Photo Transfer"
-          OutFile "PhotoTransfer-1.0.0-Windows-Setup.exe"
-          InstallDir "$PROGRAMFILES64\Photo Transfer"
-          RequestExecutionLevel admin
-          
-          !define MUI_ABORTWARNING
-          !define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-          
-          ; Welcome page with iOS notice
-          !define MUI_WELCOMEPAGE_TEXT "This wizard will install Photo Transfer on your computer.$\r$\n$\r$\nPhoto Transfer supports both Android and iOS devices.$\r$\n$\r$\nFor iPhone/iPad support, iTunes must be installed (for Apple USB drivers).$\r$\n$\r$\nClick Next to continue."
-          
-          ; Function to close running instances before install
-          Function .onInit
-            ; Try to close any running instances of the app
-            ExecWait 'taskkill /F /IM photo_transfer_gui.exe' $0
-            ExecWait 'taskkill /F /IM photo_transfer.exe' $0
-            ; Wait for processes to fully close
-            Sleep 1000
-          FunctionEnd
-          
-          !insertmacro MUI_PAGE_WELCOME
-          !insertmacro MUI_PAGE_COMPONENTS
-          !insertmacro MUI_PAGE_DIRECTORY
-          !insertmacro MUI_PAGE_INSTFILES
-          !define MUI_FINISHPAGE_RUN "$INSTDIR\photo_transfer_gui.exe"
-          !define MUI_FINISHPAGE_RUN_TEXT "Launch Photo Transfer now"
-          !insertmacro MUI_PAGE_FINISH
-          
-          !insertmacro MUI_UNPAGE_CONFIRM
-          !insertmacro MUI_UNPAGE_INSTFILES
-          
-          !insertmacro MUI_LANGUAGE "English"
-          
-          Section "Photo Transfer (required)" SecMain
-            SectionIn RO
-            SetOutPath "$INSTDIR"
-            File /r "build\Release\*.*"
+            Fast, modern photo transfer from your phone to your computer.
             
-            ; Create Start Menu shortcuts
-            CreateDirectory "$SMPROGRAMS\Photo Transfer"
-            CreateShortcut "$SMPROGRAMS\Photo Transfer\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
-            CreateShortcut "$SMPROGRAMS\Photo Transfer\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+            ### ✨ Features
+            - 📱 **Android Support** - Transfer via MTP
+            - 🍎 **iOS Support** - iPhone & iPad (requires iTunes on Windows)
+            - 🖼️ **Modern UI** - Built with React & Tailwind
+            - ⚡ **Fast** - Native Rust backend
+            - 📁 **Smart Organization** - Organize by date automatically
             
-            ; Create Desktop shortcut
-            CreateShortcut "$DESKTOP\Photo Transfer.lnk" "$INSTDIR\photo_transfer_gui.exe" "" "$INSTDIR\photo_transfer_gui.exe" 0
+            ---
             
-            WriteUninstaller "$INSTDIR\Uninstall.exe"
-            
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayName" "Photo Transfer"
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "UninstallString" "$INSTDIR\Uninstall.exe"
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayVersion" "1.0.0"
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "Publisher" "Photo Transfer"
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer" "DisplayIcon" "$INSTDIR\photo_transfer_gui.exe"
-          SectionEnd
-          
-          Section "iOS Support (iTunes)" SecIOS
-            ; Check if Apple Mobile Device Service exists
-            ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\Apple Mobile Device Service" "ImagePath"
-            StrCmp $0 "" 0 ios_installed
-            
-            ; iTunes not installed - offer to download
-            MessageBox MB_YESNO "iTunes is required for iPhone/iPad support.$\r$\n$\r$\nWould you like to open the iTunes download page?" IDNO skip_itunes
-            ExecShell "open" "https://www.apple.com/itunes/download/win64"
-            MessageBox MB_OK "After installing iTunes, restart Photo Transfer to detect iOS devices."
-            skip_itunes:
-            Goto ios_done
-            
-            ios_installed:
-            MessageBox MB_OK "iTunes is already installed. iOS devices are supported!"
-            
-            ios_done:
-          SectionEnd
-          
-          Section "Uninstall"
-            RMDir /r "$INSTDIR"
-            RMDir /r "$SMPROGRAMS\Photo Transfer"
-            Delete "$DESKTOP\Photo Transfer.lnk"
-            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PhotoTransfer"
-          SectionEnd
-          
-          ; Section descriptions
-          !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-            !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Install Photo Transfer application (required)"
-            !insertmacro MUI_DESCRIPTION_TEXT ${SecIOS} "Check/install iTunes for iPhone and iPad support"
-          !insertmacro MUI_FUNCTION_DESCRIPTION_END
-          '@ | Out-File -FilePath "installer.nsi" -Encoding ASCII
-          
-          # Run NSIS
-          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
-          
-          # Also create portable ZIP
-          cd build/Release
-          Compress-Archive -Path * -DestinationPath ..\..\PhotoTransfer-1.0.0-Windows-Portable.zip
-      
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: |
-            PhotoTransfer-1.0.0-Windows-Setup.exe
-            PhotoTransfer-1.0.0-Windows-Portable.zip
-
-  release:
-    needs: [build-linux, build-macos, build-windows]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-      
-      - name: List downloaded files
-        run: |
-          echo "=== All downloaded files ==="
-          find . -type f \( -name "*.AppImage" -o -name "*.dmg" -o -name "*.exe" -o -name "*.zip" \)
-          echo "=== Directory structure ==="
-          ls -laR
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            linux-build/*.AppImage
-            macos-build/*.dmg
-            windows-build/*.exe
-            windows-build/*.zip
-          draft: false
-          generate_release_notes: true
-          body: |
-            ## Download Instructions
+            ## 📥 Download
             
             ### Windows
-            - **Recommended**: Download `PhotoTransfer-1.0.0-Windows-Setup.exe` - Double-click to install
-            - The installer includes an option to set up iOS support (requires iTunes)
-            - **For iPhone/iPad**: Install iTunes first, or select "iOS Support" during installation
-            - After installation, the app will launch automatically (or check desktop/Start menu)
-            - **Portable**: Download `PhotoTransfer-1.0.0-Windows-Portable.zip` - Extract and run
+            - **Installer**: `Photo.Transfer_x.x.x_x64-setup.exe` - Recommended
+            - **Portable**: `Photo.Transfer_x.x.x_x64_en-US.msi`
+            - ⚠️ **For iPhone/iPad**: Install [iTunes](https://www.apple.com/itunes/) first
             
             ### macOS
-            - Download `PhotoTransfer-1.0.0-macOS.dmg` and open it
-            - Drag "Photo Transfer" to Applications folder
-            - **IMPORTANT - First Launch**: macOS will block the app (not signed)
-            - **Solution**: Right-click "Photo Transfer" in Applications → **Open** (first time only)
-            - Alternative: Open Terminal and run: `xattr -cr "/Applications/Photo Transfer.app"`
-            - iOS and Android devices are fully supported on macOS
+            - Download `.dmg` and drag to Applications
+            - **First launch**: Right-click → Open (to bypass Gatekeeper)
+            - Full iOS and Android support
             
             ### Linux
-            - Download `PhotoTransfer-1.0.0-Linux.AppImage`
-            - Make executable: `chmod +x PhotoTransfer-1.0.0-Linux.AppImage`
-            - Double-click or run: `./PhotoTransfer-1.0.0-Linux.AppImage`
-          fail_on_unmatched_files: false
+            - **AppImage**: `photo-transfer_x.x.x_amd64.AppImage`
+            - **Debian/Ubuntu**: `photo-transfer_x.x.x_amd64.deb`
+            - Make AppImage executable: `chmod +x *.AppImage`
+          releaseDraft: false
+          prerelease: false
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-build
+          path: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe

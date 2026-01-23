@@ -1,132 +1,104 @@
 # Photo Transfer
 
-Transfer photos and videos from your phone to your computer. Works with Android and iPhone/iPad.
+A fast, modern photo transfer app built with React, Tailwind CSS, and Tauri (Rust).
 
-![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Photo Transfer](https://img.shields.io/badge/version-2.0.0-blue)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-green)
 
 ## Features
 
-- ✅ **Android & iOS Support** - Works with Samsung, Pixel, iPhone, iPad, and more
-- ✅ **Smart Deduplication** - Never transfer the same photo twice
-- ✅ **HEIC to JPEG Conversion** - Automatically convert Apple photos for compatibility
-- ✅ **Resume Transfers** - Pick up where you left off if interrupted
-- ✅ **10 Color Themes** - Customize the look to your preference
-- ✅ **Photo Preview** - See photos before transferring
+- 📱 **Universal Device Support** - Android (MTP) and iOS devices
+- ⚡ **Fast Transfers** - Native Rust backend for maximum speed
+- 🎨 **Modern UI** - Beautiful React + Tailwind CSS interface
+- 📁 **Smart Organization** - Organize photos by date automatically
+- 🔄 **Duplicate Detection** - Skip files already transferred
+- 💾 **Lightweight** - ~10MB app size
 
----
+## Installation
 
-## Download
+### Pre-built Binaries
 
-**Note:** Pre-built releases are available on the [Releases](https://github.com/frahay123/filetransfer/releases) page. If no releases are available yet, you can build from source (see below).
+Download from [Releases](../../releases):
 
-### Linux
-1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
-2. Download the `.AppImage` file (e.g., `PhotoTransfer-*-x86_64.AppImage`)
-3. Make it executable: `chmod +x PhotoTransfer-*.AppImage`
-4. Run it: `./PhotoTransfer-*.AppImage`
+| Platform | Download |
+|----------|----------|
+| Windows | `.exe` installer or `.msi` |
+| macOS | `.dmg` disk image |
+| Linux | `.AppImage` or `.deb` |
 
-### macOS
-1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
-2. Download the `.dmg` file (e.g., `PhotoTransfer-*-macOS.dmg`)
-3. Open the DMG file
-4. Drag **Photo Transfer** to your Applications folder
-5. Open from Applications (right-click → Open on first launch)
+### Windows (iOS Support)
 
-### Windows
-1. Go to [Releases](https://github.com/frahay123/filetransfer/releases)
-2. Download the `.zip` file (e.g., `PhotoTransfer-*-Windows.zip`)
-3. Extract the ZIP file
-4. Run `photo_transfer_gui.exe`
+For iPhone/iPad support on Windows, install [iTunes](https://www.apple.com/itunes/) first.
 
----
+### macOS (Gatekeeper)
 
-## Build from Source
+Since the app isn't code-signed:
+1. Download and open the `.dmg`
+2. Drag to Applications
+3. **Right-click** → **Open** (first time only)
 
-### Linux (Ubuntu/Debian)
+## Development
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) 1.70+
+- [Tauri prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites)
+
+### Setup
+
 ```bash
 # Install dependencies
-sudo apt install build-essential cmake pkg-config \
-    libmtp-dev libsqlite3-dev libssl-dev \
-    libimobiledevice-dev libplist-dev usbmuxd \
-    qt6-base-dev qt6-tools-dev
+npm install
 
-# Build
-mkdir build && cd build
-cmake .. -DBUILD_GUI=ON
-make -j$(nproc)
+# Run in development mode
+npm run tauri dev
 
-# Run
-./photo_transfer_gui
+# Build for production
+npm run tauri build
 ```
 
-### macOS
+### Linux Dependencies
+
 ```bash
-# Install dependencies
-brew install cmake qt@6 libmtp libimobiledevice openssl@3 sqlite3
-
-# Build
-mkdir build && cd build
-cmake .. -DBUILD_GUI=ON \
-    -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3) \
-    -DQt6_DIR=$(brew --prefix qt@6)/lib/cmake/Qt6
-make -j$(sysctl -n hw.ncpu)
-
-# Run
-./photo_transfer_gui
+sudo apt install libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev libusb-1.0-0-dev \
+  libmtp-dev libimobiledevice-dev ifuse
 ```
 
-### Windows
-```powershell
-# Install Qt from https://www.qt.io/download
-# Install vcpkg and dependencies:
-vcpkg install sqlite3:x64-windows openssl:x64-windows
+### macOS Dependencies
 
-# Build
-mkdir build && cd build
-cmake .. -DBUILD_GUI=ON -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build . --config Release
-```
-
----
-
-## Usage
-
-1. **Connect your phone** via USB cable
-2. **Select your device** from the dropdown
-3. **Click Connect**
-4. **Select photos** to transfer (or click "Select All")
-5. **Choose destination folder**
-6. **Click Start Transfer**
-
-### For iPhone Users
-- When you connect, the app will detect HEIC photos
-- Check "Convert HEIC to JPEG" if you want compatibility with all devices
-- Choose quality level (90% recommended)
-
----
-
-## Themes
-
-Go to **File → Settings** to choose from 10 color themes:
-- Light, Dark, Midnight, Forest, Sunset, Ocean, Purple, Slate, Rose, High Contrast
-
----
-
-## Troubleshooting
-
-### Phone not detected?
-- **Android**: Enable "File Transfer" or "MTP" mode when prompted
-- **iPhone**: Tap "Trust" when asked to trust this computer
-
-### Permission denied (Linux)?
 ```bash
-sudo usermod -aG plugdev $USER
-# Log out and back in
+brew install libmtp libimobiledevice
 ```
 
----
+## Project Structure
+
+```
+photo-transfer/
+├── src/                    # React frontend
+│   ├── components/         # UI components
+│   ├── App.tsx            # Main app
+│   └── index.css          # Tailwind styles
+├── src-tauri/             # Rust backend
+│   └── src/
+│       ├── main.rs        # Tauri commands
+│       ├── device.rs      # Device detection
+│       └── transfer.rs    # File transfer
+├── src-cpp/               # Legacy C++ code (reference)
+├── package.json
+└── tailwind.config.js
+```
+
+## Tech Stack
+
+- **Frontend**: React 18, TypeScript, Tailwind CSS
+- **Backend**: Rust, Tauri
+- **Device Access**: 
+  - Linux/macOS: libmtp, libimobiledevice
+  - Windows: Windows Portable Devices (WPD) API
+- **Build**: Vite, Cargo
 
 ## License
 
-MIT License - Free to use and modify.
+MIT
