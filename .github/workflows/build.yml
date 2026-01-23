@@ -31,7 +31,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -63,7 +62,66 @@ jobs:
           brew install libmtp libimobiledevice libusb
           
       - name: Install npm dependencies
-        run: npm ci
+        run: npm install
+      
+      - name: Generate app icons
+        shell: bash
+        run: |
+          pip3 install Pillow || pip install Pillow || true
+          python3 << 'ICONSCRIPT' || python << 'ICONSCRIPT'
+          import os
+          os.makedirs('src-tauri/icons', exist_ok=True)
+          
+          try:
+              from PIL import Image, ImageDraw
+              
+              def create_icon(size, filename):
+                  img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                  draw = ImageDraw.Draw(img)
+                  # Rounded rectangle background
+                  margin = size // 10
+                  radius = size // 5
+                  draw.rounded_rectangle(
+                      [margin, margin, size - margin, size - margin],
+                      radius=radius,
+                      fill=(14, 165, 233, 255)
+                  )
+                  # Upload arrow
+                  cx, cy = size // 2, size // 2
+                  arrow_h = size // 3
+                  arrow_w = size // 4
+                  # Arrow head
+                  draw.polygon([
+                      (cx, cy - arrow_h // 2),
+                      (cx + arrow_w, cy),
+                      (cx - arrow_w, cy)
+                  ], fill=(255, 255, 255, 240))
+                  # Arrow stem
+                  stem_w = arrow_w // 2
+                  draw.rectangle([
+                      cx - stem_w, cy,
+                      cx + stem_w, cy + arrow_h // 2
+                  ], fill=(255, 255, 255, 240))
+                  img.save(f'src-tauri/icons/{filename}')
+                  return img
+              
+              create_icon(32, '32x32.png')
+              img128 = create_icon(128, '128x128.png')
+              create_icon(256, '128x128@2x.png')
+              create_icon(512, 'icon.png')
+              
+              # Create ICO
+              img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
+              
+              # For macOS, we'll let Tauri handle icns or create a simple one
+              create_icon(512, 'icon.icns')  # Tauri will convert if needed
+              
+              print('Icons created successfully!')
+          except Exception as e:
+              print(f'Warning: Could not create icons with Pillow: {e}')
+              print('Tauri will use default icons')
+          ICONSCRIPT
+          ls -la src-tauri/icons/ 2>/dev/null || dir src-tauri\\icons 2>NUL || echo "Icons directory created"
         
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
