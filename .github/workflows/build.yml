@@ -54,8 +54,7 @@ jobs:
             libmtp-dev \
             libimobiledevice-dev \
             ifuse \
-            patchelf \
-            file
+            patchelf
             
       - name: Install macOS dependencies
         if: matrix.target == 'macos'
@@ -81,14 +80,9 @@ jobs:
         run: |
           python3 << 'ICONSCRIPT'
           import os
-          import sys
           os.makedirs('src-tauri/icons', exist_ok=True)
           
-          try:
-              from PIL import Image, ImageDraw
-          except ImportError:
-              print("ERROR: PIL/Pillow not available!")
-              sys.exit(1)
+          from PIL import Image, ImageDraw
           
           def create_icon(size, filename):
               img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -120,45 +114,17 @@ jobs:
               img.save(f'src-tauri/icons/{filename}')
               return img
           
-          # Create all required icons
           create_icon(32, '32x32.png')
           img128 = create_icon(128, '128x128.png')
           create_icon(256, '128x128@2x.png')
-          img512 = create_icon(512, 'icon.png')
+          create_icon(512, 'icon.png')
           
-          # Create ICO for Windows (with error handling)
-          try:
-              img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
-          except Exception as e:
-              print(f"Warning: ICO creation failed: {e}")
-              # Fallback: save as single-size ICO
-              try:
-                  img128.save('src-tauri/icons/icon.ico', format='ICO')
-              except Exception as e2:
-                  print(f"Warning: ICO fallback failed: {e2}")
+          # Create ICO for Windows
+          img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
           
           print('Icons created successfully!')
           ICONSCRIPT
-          
-          # Verify icons were created and are valid
-          echo "Verifying icon files..."
           ls -la src-tauri/icons/
-          REQUIRED_ICONS=("32x32.png" "128x128.png" "128x128@2x.png" "icon.png")
-          for icon in "${REQUIRED_ICONS[@]}"; do
-            if [[ ! -f "src-tauri/icons/$icon" ]]; then
-              echo "ERROR: Required icon missing: $icon"
-              exit 1
-            fi
-            # Verify it's a valid PNG (if file command is available)
-            if command -v file &> /dev/null; then
-              file_type=$(file "src-tauri/icons/$icon" | grep -i "PNG" || echo "")
-              if [[ -z "$file_type" ]]; then
-                echo "WARNING: $icon may not be a valid PNG file"
-              fi
-            fi
-            echo "✓ $icon exists"
-          done
-          echo "✓ All required icons present"
       
       - name: Create macOS icon
         if: matrix.target == 'macos'
@@ -169,7 +135,6 @@ jobs:
           python3 << 'ICONSCRIPT'
           from PIL import Image, ImageDraw
           import os
-          import sys
 
           def create_icon(size):
               img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -208,43 +173,9 @@ jobs:
           ICONSCRIPT
           
           # Convert iconset to icns using iconutil
-          if ! iconutil -c icns src-tauri/icons/icon.iconset -o src-tauri/icons/icon.icns; then
-            echo "ERROR: Failed to create icon.icns"
-            exit 1
-          fi
+          iconutil -c icns src-tauri/icons/icon.iconset -o src-tauri/icons/icon.icns
           rm -rf src-tauri/icons/icon.iconset
-          
-          # Verify icns file was created
-          if [[ ! -f "src-tauri/icons/icon.icns" ]]; then
-            echo "ERROR: icon.icns not created!"
-            exit 1
-          fi
-          echo "✓ macOS icon created successfully"
           ls -la src-tauri/icons/
-        
-      - name: Verify build prerequisites
-        shell: bash
-        run: |
-          echo "=== Verifying Build Prerequisites ==="
-          echo "Checking dist directory..."
-          if [[ ! -d "dist" ]]; then
-            echo "ERROR: dist directory does not exist!"
-            echo "Frontend build may have failed. Checking npm build..."
-            exit 1
-          fi
-          echo "✓ dist directory exists"
-          ls -la dist/ | head -5
-          
-          echo ""
-          echo "Checking icons..."
-          ls -la src-tauri/icons/ || echo "WARNING: Icons directory issue"
-          
-          echo ""
-          echo "Checking src-tauri structure..."
-          ls -la src-tauri/ | head -10
-          
-          echo ""
-          echo "=== Prerequisites Verified ==="
         
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
