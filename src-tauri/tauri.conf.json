@@ -46,7 +46,9 @@
       "shortDescription": "Transfer photos from phone to computer",
       "longDescription": "A fast, modern app for transferring photos and videos from your iPhone or Android phone to your computer.",
       "deb": {
-        "depends": ["libmtp9", "libimobiledevice6", "ifuse", "libwebkit2gtk-4.0-37"]
+        "depends": ["libmtp9", "libimobiledevice6", "ifuse", "libwebkit2gtk-4.0-37"],
+        "files": {},
+        "desktopTemplate": null
       },
       "macOS": {
         "entitlements": null,
@@ -54,7 +56,13 @@
         "frameworks": [],
         "providerShortName": null,
         "signingIdentity": null,
-        "minimumSystemVersion": "10.13"
+        "minimumSystemVersion": "10.13",
+        "info": {
+          "CFBundleName": "Photo Transfer",
+          "CFBundleDisplayName": "Photo Transfer",
+          "CFBundleShortVersionString": "2.0.0",
+          "CFBundleVersion": "2.0.0"
+        }
       },
       "windows": {
         "certificateThumbprint": null,
