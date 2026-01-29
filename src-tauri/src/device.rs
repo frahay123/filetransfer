@@ -395,54 +395,89 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
             .output()
             .is_ok()
         {
-            // Look for DCIM folder
-            if let Ok(entries) = std::fs::read_dir(format!("{}/DCIM", mount_point)) {
-                for (i, entry) in entries.flatten().enumerate() {
+            // Recursively search DCIM folder for actual media files
+            let dcim_path = format!("{}/DCIM", mount_point);
+            if let Ok(entries) = std::fs::read_dir(&dcim_path) {
+                // First, get all subdirectories (100APPLE, 101APPLE, etc.)
+                let mut subdirs = Vec::new();
+                for entry in entries.flatten() {
                     if let Ok(metadata) = entry.metadata() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        let media_type = if name.to_lowercase().ends_with(".mov") 
-                            || name.to_lowercase().ends_with(".mp4") {
-                            "video"
-                        } else {
-                            "photo"
-                        };
-                        
-                        items.push(MediaItem {
-                            id: format!("ios-{}", i),
-                            name,
-                            media_type: media_type.to_string(),
-                            size: metadata.len(),
-                            date: chrono::Utc::now().to_rfc3339(),
-                            thumbnail: None,
-                            full_path: entry.path().to_string_lossy().to_string(),
-                        });
+                        if metadata.is_dir() {
+                            subdirs.push(entry.path());
+                        }
+                    }
+                }
+                
+                // Now search each subdirectory for actual media files
+                let mut file_count = 0;
+                for subdir in subdirs {
+                    if let Ok(files) = std::fs::read_dir(&subdir) {
+                        for entry in files.flatten() {
+                            if let Ok(metadata) = entry.metadata() {
+                                // Only process files, not directories
+                                if metadata.is_file() {
+                                    let name = entry.file_name().to_string_lossy().to_string();
+                                    let name_lower = name.to_lowercase();
+                                    
+                                    // Check if it's a media file
+                                    let is_media = name_lower.ends_with(".jpg") 
+                                        || name_lower.ends_with(".jpeg")
+                                        || name_lower.ends_with(".heic")
+                                        || name_lower.ends_with(".heif")
+                                        || name_lower.ends_with(".png")
+                                        || name_lower.ends_with(".mov")
+                                        || name_lower.ends_with(".mp4")
+                                        || name_lower.ends_with(".m4v");
+                                    
+                                    if is_media {
+                                        let media_type = if name_lower.ends_with(".mov") 
+                                            || name_lower.ends_with(".mp4")
+                                            || name_lower.ends_with(".m4v") {
+                                            "video"
+                                        } else {
+                                            "photo"
+                                        };
+                                        
+                                        // Get file modification time for date
+                                        let date = metadata
+                                            .modified()
+                                            .ok()
+                                            .and_then(|t| {
+                                                Some(chrono::DateTime::<chrono::Utc>::from(t)
+                                                    .to_rfc3339())
+                                            })
+                                            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+                                        
+                                        items.push(MediaItem {
+                                            id: format!("ios-{}", file_count),
+                                            name: name.clone(),
+                                            media_type: media_type.to_string(),
+                                            size: metadata.len(),
+                                            date,
+                                            thumbnail: None,
+                                            full_path: entry.path().to_string_lossy().to_string(),
+                                        });
+                                        file_count += 1;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             
             // Unmount
+            #[cfg(target_os = "linux")]
             let _ = Command::new("fusermount").args(["-u", &mount_point]).output();
+            #[cfg(target_os = "macos")]
+            let _ = Command::new("umount").args([&mount_point]).output();
         }
     }
     
-    // Demo items if nothing found
+    // Only use demo items if truly nothing found (not just empty DCIM)
     if items.is_empty() {
-        for i in 0..15 {
-            let is_video = i % 4 == 0;
-            items.push(MediaItem {
-                id: format!("ios-demo-{}", i),
-                name: format!("{}{:04}.{}", 
-                    if is_video { "IMG_" } else { "IMG_" },
-                    5000 + i,
-                    if is_video { "MOV" } else { "HEIC" }
-                ),
-                media_type: if is_video { "video" } else { "photo" }.to_string(),
-                size: 4_000_000 + (i as u64 * 800_000),
-                date: chrono::Utc::now().to_rfc3339(),
-                thumbnail: None,
-                full_path: format!("/DCIM/100APPLE/IMG_{:04}.HEIC", 5000 + i),
-            });
-        }
+        // Could add logging here to debug why no items were found
+        eprintln!("Warning: No media items found on iOS device");
     }
     
     Ok(items)
