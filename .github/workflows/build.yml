@@ -75,9 +75,10 @@ jobs:
             pip install Pillow || pip3 install Pillow || true
           fi
 
-      - name: Generate Windows icon
-        if: matrix.target == 'windows'
+      - name: Generate icons
         shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
         run: |
           python3 << 'ICONSCRIPT'
           import os
@@ -114,11 +115,18 @@ jobs:
               ], fill=(255, 255, 255, 240))
               return img
           
-          # Create ICO for Windows only
-          img128 = create_icon(128)
-          img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
+          # Create icon.png for all platforms (required for generate_context!() build-time)
+          img512 = create_icon(512)
+          img512.save('src-tauri/icons/icon.png')
+          print('icon.png created for build-time requirement')
           
-          print('Windows icon created successfully!')
+          # Create icon.ico for Windows only (required for bundling)
+          target = os.environ.get('TARGET_PLATFORM', '')
+          if target == 'windows':
+              img128 = create_icon(128)
+              img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
+              print('icon.ico created for Windows')
+          
           ICONSCRIPT
           ls -la src-tauri/icons/
       
@@ -133,7 +141,7 @@ jobs:
           with open('src-tauri/tauri.conf.json', 'r') as f:
               config = json.load(f)
           
-          # Add icon.ico to the icon array
+          # Add icon.ico to the icon array for Windows bundling
           config['tauri']['bundle']['icon'] = ['icons/icon.ico']
           
           # Write back to file
@@ -142,28 +150,6 @@ jobs:
           
           print('Config updated for Windows build')
           CONFIGSCRIPT
-      
-      - name: Create placeholder icon for Linux
-        if: matrix.target == 'linux'
-        shell: bash
-        run: |
-          python3 << 'ICONSCRIPT'
-          import os
-          os.makedirs('src-tauri/icons', exist_ok=True)
-          
-          from PIL import Image, ImageDraw
-          
-          # Create a minimal placeholder icon.png for build process
-          # Tauri generate_context!() requires this file even if not used in bundle
-          img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
-          draw = ImageDraw.Draw(img)
-          # Simple solid color square as placeholder
-          draw.rectangle([0, 0, 512, 512], fill=(14, 165, 233, 255))
-          
-          img.save('src-tauri/icons/icon.png')
-          print('Placeholder icon created for Linux build')
-          ICONSCRIPT
-          ls -la src-tauri/icons/
       
       - name: Create macOS icon
         if: matrix.target == 'macos'
