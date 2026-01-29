@@ -32,20 +32,37 @@ pub struct TransferProgress {
     status: String,
 }
 
-// Scan for connected devices
+// Scan for connected devices (supports hot-swapping - can be called repeatedly)
 #[tauri::command]
 async fn scan_devices(state: State<'_, AppState>) -> Result<Vec<Device>, String> {
     log::info!("Scanning for devices...");
     
     let devices = device::scan_all_devices().await;
     
-    // Store in state
+    // Update state and handle hot-swapping
     {
         let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
+        let old_device_ids: std::collections::HashSet<String> = state_devices.iter()
+            .map(|d| d.id.clone())
+            .collect();
+        let new_device_ids: std::collections::HashSet<String> = devices.iter()
+            .map(|d| d.id.clone())
+            .collect();
+        
+        // Clear media cache for devices that are no longer connected
+        {
+            let mut cache = state.media_cache.lock().map_err(|e| e.to_string())?;
+            for old_id in old_device_ids.difference(&new_device_ids) {
+                cache.remove(old_id);
+                log::info!("Removed cache for disconnected device: {}", old_id);
+            }
+        }
+        
+        // Update devices list
         *state_devices = devices.clone();
     }
     
-    log::info!("Found {} devices", devices.len());
+    log::info!("Found {} devices (hot-swap ready)", devices.len());
     Ok(devices)
 }
 
@@ -76,6 +93,7 @@ async fn get_media_items(device_id: String, state: State<'_, AppState>) -> Resul
     {
         let cache = state.media_cache.lock().map_err(|e| e.to_string())?;
         if let Some(items) = cache.get(&device_id) {
+            log::info!("Returning {} cached media items", items.len());
             return Ok(items.clone());
         }
     }
@@ -95,9 +113,25 @@ async fn get_media_items(device_id: String, state: State<'_, AppState>) -> Resul
     {
         let mut cache = state.media_cache.lock().map_err(|e| e.to_string())?;
         cache.insert(device_id, items.clone());
+        log::info!("Cached {} media items", items.len());
     }
     
     Ok(items)
+}
+
+// Refresh media items for a device (clears cache and re-enumerates)
+#[tauri::command]
+async fn refresh_media_items(device_id: String, state: State<'_, AppState>) -> Result<Vec<MediaItem>, String> {
+    log::info!("Refreshing media for device: {}", device_id);
+    
+    // Clear cache for this device
+    {
+        let mut cache = state.media_cache.lock().map_err(|e| e.to_string())?;
+        cache.remove(&device_id);
+    }
+    
+    // Re-enumerate (this will cache the new results)
+    get_media_items(device_id, state).await
 }
 
 // Transfer files from device to computer
@@ -224,6 +258,7 @@ fn main() {
             scan_devices,
             connect_device,
             get_media_items,
+            refresh_media_items,
             transfer_files,
             get_default_destination,
             open_folder,

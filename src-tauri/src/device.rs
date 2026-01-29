@@ -115,7 +115,7 @@ async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
         }
     }
     
-    // Fallback: mtp-detect
+    // Fallback: mtp-detect - try to mount with gio if not already mounted
     if devices.is_empty() {
         if let Ok(output) = Command::new("mtp-detect").output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -137,6 +137,20 @@ async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
                     }
                 }
                 
+                // Try to find mount point by checking gio mount list again
+                let mut mount_point = None;
+                if let Ok(mount_output) = Command::new("gio").args(["mount", "-l"]).output() {
+                    let mount_stdout = String::from_utf8_lossy(&mount_output.stdout);
+                    for line in mount_stdout.lines() {
+                        if line.contains("mtp://") {
+                            if let Some(idx) = line.find("mtp://") {
+                                mount_point = Some(line[idx..].split_whitespace().next().unwrap_or("").to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+                
                 devices.push(Device {
                     id: "mtp-0".to_string(),
                     name,
@@ -146,7 +160,7 @@ async fn scan_mtp_linux() -> Result<Vec<Device>, String> {
                     storage_total: 0,
                     photo_count: 0,
                     connected: true,
-                    mount_point: None,
+                    mount_point,
                     usb_bus: None,
                     usb_address: None,
                 });
@@ -314,71 +328,121 @@ pub async fn enumerate_media(device: &Device) -> Result<Vec<MediaItem>, String> 
 }
 
 /// Enumerate Android media via MTP
+/// Ported from C++ MTPHandler::enumerateDirectory - recursively searches all subdirectories
 async fn enumerate_android_media(device: &Device) -> Result<Vec<MediaItem>, String> {
     let _ = device; // Used conditionally per platform
     let mut items = Vec::new();
     
     #[cfg(target_os = "linux")]
     {
-        if let Some(ref mount) = device.mount_point {
-            // Use gio to list DCIM folder
-            if let Ok(output) = Command::new("gio")
-                .args(["list", "-l", &format!("{}/DCIM", mount)])
-                .output()
-            {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for (i, line) in stdout.lines().enumerate() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if !parts.is_empty() {
-                        let name = parts[0].to_string();
-                        let size: u64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-                        
-                        let media_type = if name.to_lowercase().ends_with(".mp4") 
-                            || name.to_lowercase().ends_with(".mov") {
-                            "video"
-                        } else {
-                            "photo"
-                        };
-                        
-                        items.push(MediaItem {
-                            id: format!("media-{}", i),
-                            name: name.clone(),
-                            media_type: media_type.to_string(),
-                            size,
-                            date: chrono::Utc::now().to_rfc3339(),
-                            thumbnail: None,
-                            full_path: format!("{}/DCIM/{}", mount, name),
-                        });
+        // Helper function to recursively search directory (like C++ enumerateDirectory)
+        fn search_directory(path: &std::path::Path, items: &mut Vec<MediaItem>, file_count: &mut usize) {
+            if let Ok(entries) = std::fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    if let Ok(metadata) = entry.metadata() {
+                        if metadata.is_dir() {
+                            // Recurse into subdirectory (like C++ line 468)
+                            search_directory(&entry.path(), items, file_count);
+                        } else if metadata.is_file() {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            let name_lower = name.to_lowercase();
+                            
+                            // Check if it's a media file (matching C++ isMediaFile)
+                            // Photos: .jpg, .jpeg, .png, .gif, .bmp, .webp, .heic, .heif, .dng, .raw
+                            // Videos: .mp4, .mov, .m4v, .avi, .mkv, .3gp, .webm
+                            let is_media = name_lower.ends_with(".jpg") 
+                                || name_lower.ends_with(".jpeg")
+                                || name_lower.ends_with(".png")
+                                || name_lower.ends_with(".gif")
+                                || name_lower.ends_with(".bmp")
+                                || name_lower.ends_with(".webp")
+                                || name_lower.ends_with(".heic")
+                                || name_lower.ends_with(".heif")
+                                || name_lower.ends_with(".dng")
+                                || name_lower.ends_with(".raw")
+                                || name_lower.ends_with(".mov")
+                                || name_lower.ends_with(".mp4")
+                                || name_lower.ends_with(".m4v")
+                                || name_lower.ends_with(".avi")
+                                || name_lower.ends_with(".mkv")
+                                || name_lower.ends_with(".3gp")
+                                || name_lower.ends_with(".webm");
+                            
+                            if is_media {
+                                let media_type = if name_lower.ends_with(".mov") 
+                                    || name_lower.ends_with(".mp4")
+                                    || name_lower.ends_with(".m4v")
+                                    || name_lower.ends_with(".avi")
+                                    || name_lower.ends_with(".mkv")
+                                    || name_lower.ends_with(".3gp")
+                                    || name_lower.ends_with(".webm") {
+                                    "video"
+                                } else {
+                                    "photo"
+                                };
+                                
+                                // Get file modification time for date (like C++ modification_date)
+                                let date = metadata
+                                    .modified()
+                                    .ok()
+                                    .and_then(|t| {
+                                        Some(chrono::DateTime::<chrono::Utc>::from(t)
+                                            .to_rfc3339())
+                                    })
+                                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+                                
+                                items.push(MediaItem {
+                                    id: format!("android-{}", file_count),
+                                    name: name.clone(),
+                                    media_type: media_type.to_string(),
+                                    size: metadata.len(),
+                                    date,
+                                    thumbnail: None,
+                                    full_path: entry.path().to_string_lossy().to_string(),
+                                });
+                                *file_count += 1;
+                            }
+                        }
                     }
                 }
             }
         }
+        
+        let mut file_count = 0;
+        
+        if let Some(ref mount) = device.mount_point {
+            // Search DCIM folder recursively (like C++ enumerateDirectory starting from DCIM)
+            let dcim_path = format!("{}/DCIM", mount);
+            let dcim_path_obj = std::path::Path::new(&dcim_path);
+            if dcim_path_obj.exists() {
+                search_directory(dcim_path_obj, &mut items, &mut file_count);
+            }
+            
+            // Also check Pictures folder (some Android devices use this)
+            let pictures_path = format!("{}/Pictures", mount);
+            let pictures_path_obj = std::path::Path::new(&pictures_path);
+            if pictures_path_obj.exists() {
+                search_directory(pictures_path_obj, &mut items, &mut file_count);
+            }
+        } else {
+            // Fallback: Try to use gio directly with mtp:// URI
+            // This handles cases where device is detected but not mounted
+            log::warn!("No mount point for Android device, trying gio list directly");
+            // Note: This would require parsing gio list output which is complex
+            // For now, we'll just log and return empty - user can try mounting manually
+        }
     }
     
-    // Demo items if nothing found
+    // No demo items - return empty if nothing found (like C++ returns empty vector)
     if items.is_empty() {
-        for i in 0..20 {
-            let is_video = i % 5 == 0;
-            items.push(MediaItem {
-                id: format!("demo-{}", i),
-                name: format!("{}{:04}.{}", 
-                    if is_video { "VID_" } else { "IMG_" },
-                    1000 + i,
-                    if is_video { "mp4" } else { "jpg" }
-                ),
-                media_type: if is_video { "video" } else { "photo" }.to_string(),
-                size: 3_500_000 + (i as u64 * 500_000),
-                date: chrono::Utc::now().to_rfc3339(),
-                thumbnail: None,
-                full_path: format!("/DCIM/Camera/IMG_{:04}.jpg", 1000 + i),
-            });
-        }
+        log::warn!("No media items found on Android device");
     }
     
     Ok(items)
 }
 
 /// Enumerate iOS media using ifuse
+/// Ported from C++ iOSHandler::enumerateDirectory - recursively searches all subdirectories
 async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> {
     let mut items = Vec::new();
     
@@ -390,55 +454,68 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
         // Try to mount and enumerate
         let _ = std::fs::create_dir_all(&mount_point);
         
-        if Command::new("ifuse")
+        // Check if mount succeeded
+        let mount_result = Command::new("ifuse")
             .args(["-u", udid, &mount_point])
-            .output()
-            .is_ok()
-        {
-            // Recursively search DCIM folder for actual media files
+            .output();
+        
+        if mount_result.is_ok() {
+            // Verify mount succeeded by checking if DCIM exists
             let dcim_path = format!("{}/DCIM", mount_point);
-            if let Ok(entries) = std::fs::read_dir(&dcim_path) {
-                // First, get all subdirectories (100APPLE, 101APPLE, etc.)
-                let mut subdirs = Vec::new();
-                for entry in entries.flatten() {
+            if std::path::Path::new(&dcim_path).exists() {
+                // Recursive helper function (like C++ enumerateDirectory)
+                fn search_directory(path: &std::path::Path, items: &mut Vec<MediaItem>, file_count: &mut usize) {
+                    if let Ok(entries) = std::fs::read_dir(path) {
+                        for entry in entries.flatten() {
+                            // Skip . and .. (like C++ line 249)
+                            let name = entry.file_name();
+                            if name == "." || name == ".." {
+                                continue;
+                            }
+                            
                     if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_dir() {
-                            subdirs.push(entry.path());
-                        }
-                    }
-                }
-                
-                // Now search each subdirectory for actual media files
-                let mut file_count = 0;
-                for subdir in subdirs {
-                    if let Ok(files) = std::fs::read_dir(&subdir) {
-                        for entry in files.flatten() {
-                            if let Ok(metadata) = entry.metadata() {
-                                // Only process files, not directories
-                                if metadata.is_file() {
-                                    let name = entry.file_name().to_string_lossy().to_string();
-                                    let name_lower = name.to_lowercase();
+                                if metadata.is_dir() {
+                                    // Recurse into subdirectory (like C++ line 283)
+                                    search_directory(&entry.path(), items, file_count);
+                                } else if metadata.is_file() {
+                                    let name_str = name.to_string_lossy().to_string();
+                                    let name_lower = name_str.to_lowercase();
                                     
-                                    // Check if it's a media file
+                                    // Check if it's a media file (matching C++ isMediaFile)
+                                    // Photos: .jpg, .jpeg, .png, .gif, .bmp, .webp, .heic, .heif, .dng, .raw
+                                    // Videos: .mp4, .mov, .m4v, .avi, .mkv, .3gp, .webm
                                     let is_media = name_lower.ends_with(".jpg") 
                                         || name_lower.ends_with(".jpeg")
+                                        || name_lower.ends_with(".png")
+                                        || name_lower.ends_with(".gif")
+                                        || name_lower.ends_with(".bmp")
+                                        || name_lower.ends_with(".webp")
                                         || name_lower.ends_with(".heic")
                                         || name_lower.ends_with(".heif")
-                                        || name_lower.ends_with(".png")
+                                        || name_lower.ends_with(".dng")
+                                        || name_lower.ends_with(".raw")
                                         || name_lower.ends_with(".mov")
                                         || name_lower.ends_with(".mp4")
-                                        || name_lower.ends_with(".m4v");
+                                        || name_lower.ends_with(".m4v")
+                                        || name_lower.ends_with(".avi")
+                                        || name_lower.ends_with(".mkv")
+                                        || name_lower.ends_with(".3gp")
+                                        || name_lower.ends_with(".webm");
                                     
                                     if is_media {
                                         let media_type = if name_lower.ends_with(".mov") 
                                             || name_lower.ends_with(".mp4")
-                                            || name_lower.ends_with(".m4v") {
-                                            "video"
-                                        } else {
-                                            "photo"
-                                        };
-                                        
-                                        // Get file modification time for date
+                                            || name_lower.ends_with(".m4v")
+                                            || name_lower.ends_with(".avi")
+                                            || name_lower.ends_with(".mkv")
+                                            || name_lower.ends_with(".3gp")
+                                            || name_lower.ends_with(".webm") {
+                            "video"
+                        } else {
+                            "photo"
+                        };
+                        
+                                        // Get file modification time for date (like C++ modification_date)
                                         let date = metadata
                                             .modified()
                                             .ok()
@@ -448,22 +525,28 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
                                             })
                                             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
                                         
-                                        items.push(MediaItem {
+                        items.push(MediaItem {
                                             id: format!("ios-{}", file_count),
-                                            name: name.clone(),
-                                            media_type: media_type.to_string(),
-                                            size: metadata.len(),
+                                            name: name_str.clone(),
+                            media_type: media_type.to_string(),
+                            size: metadata.len(),
                                             date,
-                                            thumbnail: None,
-                                            full_path: entry.path().to_string_lossy().to_string(),
-                                        });
-                                        file_count += 1;
+                            thumbnail: None,
+                            full_path: entry.path().to_string_lossy().to_string(),
+                        });
+                                        *file_count += 1;
                                     }
                                 }
                             }
                         }
                     }
                 }
+                
+                let mut file_count = 0;
+                let dcim_path_obj = std::path::Path::new(&dcim_path);
+                search_directory(dcim_path_obj, &mut items, &mut file_count);
+            } else {
+                log::warn!("DCIM folder not found at {}", dcim_path);
             }
             
             // Unmount
@@ -471,13 +554,14 @@ async fn enumerate_ios_media(device: &Device) -> Result<Vec<MediaItem>, String> 
             let _ = Command::new("fusermount").args(["-u", &mount_point]).output();
             #[cfg(target_os = "macos")]
             let _ = Command::new("umount").args([&mount_point]).output();
+        } else {
+            log::warn!("Failed to mount iOS device with ifuse for UDID: {}", udid);
         }
     }
     
-    // Only use demo items if truly nothing found (not just empty DCIM)
+    // No demo items - return empty if nothing found (like C++ returns empty vector)
     if items.is_empty() {
-        // Could add logging here to debug why no items were found
-        eprintln!("Warning: No media items found on iOS device");
+        log::warn!("No media items found on iOS device");
     }
     
     Ok(items)
