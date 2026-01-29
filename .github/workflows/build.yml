@@ -143,6 +143,28 @@ jobs:
           print('Config updated for Windows build')
           CONFIGSCRIPT
       
+      - name: Create placeholder icon for Linux
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          python3 << 'ICONSCRIPT'
+          import os
+          os.makedirs('src-tauri/icons', exist_ok=True)
+          
+          from PIL import Image, ImageDraw
+          
+          # Create a minimal placeholder icon.png for build process
+          # Tauri generate_context!() requires this file even if not used in bundle
+          img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(img)
+          # Simple solid color square as placeholder
+          draw.rectangle([0, 0, 512, 512], fill=(14, 165, 233, 255))
+          
+          img.save('src-tauri/icons/icon.png')
+          print('Placeholder icon created for Linux build')
+          ICONSCRIPT
+          ls -la src-tauri/icons/
+      
       - name: Create macOS icon
         if: matrix.target == 'macos'
         run: |
