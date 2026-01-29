@@ -207,38 +207,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Don't create release here - we'll do it in a separate job after all builds complete
           tagName: v__VERSION__
-          releaseName: 'Photo Transfer v__VERSION__'
-          releaseBody: |
-            ## 🚀 Photo Transfer v__VERSION__
-            
-            Fast, modern photo transfer from your phone to your computer.
-            
-            ### ✨ Features
-            - 📱 **Android Support** - Transfer via MTP
-            - 🍎 **iOS Support** - iPhone & iPad (requires iTunes on Windows)
-            - 🖼️ **Modern UI** - Built with React & Tailwind
-            - ⚡ **Fast** - Native Rust backend
-            - 📁 **Smart Organization** - Organize by date automatically
-            
-            ---
-            
-            ## 📥 Download
-            
-            ### Windows
-            - **Installer**: `Photo.Transfer_x.x.x_x64-setup.exe` - Recommended
-            - **Portable**: `Photo.Transfer_x.x.x_x64_en-US.msi`
-            - ⚠️ **For iPhone/iPad**: Install [iTunes](https://www.apple.com/itunes/) first
-            
-            ### macOS
-            - Download `.dmg` and drag to Applications
-            - **First launch**: Right-click → Open (to bypass Gatekeeper)
-            - Full iOS and Android support
-            
-            ### Linux
-            - **AppImage**: `photo-transfer_x.x.x_amd64.AppImage`
-            - **Debian/Ubuntu**: `photo-transfer_x.x.x_amd64.deb`
-            - Make AppImage executable: `chmod +x *.AppImage`
           releaseDraft: false
           prerelease: false
           
@@ -253,3 +223,73 @@ jobs:
             src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.msi
             src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.rpm
+          retention-days: 1
+
+  release:
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '*-build'
+          merge-multiple: true
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Photo Transfer ${{ github.ref_name }}
+          body: |
+            ## 🚀 Photo Transfer ${{ github.ref_name }}
+            
+            Fast, modern photo transfer from your phone to your computer.
+            
+            ### ✨ Features
+            - 📱 **Android Support** - Transfer via MTP
+            - 🍎 **iOS Support** - iPhone & iPad (requires iTunes on Windows)
+            - 🖼️ **Modern UI** - Built with React & Tailwind
+            - ⚡ **Fast** - Native Rust backend
+            - 📁 **Smart Organization** - Organize by date automatically
+            
+            ---
+            
+            ### 🐛 Bug Fixes & Improvements
+            
+            - ✅ **Fixed Linux build failures** - Resolved "Failed to build data folders and files" error by implementing proper icon handling
+            - ✅ **Fixed Windows build requirements** - Added `.ico` icon generation for Windows bundling
+            - ✅ **Unified icon generation system** - Implemented platform-specific icon generation that works seamlessly across all platforms:
+              - Linux: Generates build-time icons without bundling unnecessary files
+              - Windows: Generates both build-time and bundled icons (`.ico` format)
+              - macOS: Continues to generate `.icns` icons as before
+            - ✅ **Improved build reliability** - All platforms now build successfully with proper icon handling
+            
+            ---
+            
+            ## 📥 Download
+            
+            ### Windows
+            - **Installer**: `Photo.Transfer_*_x64-setup.exe` - Recommended
+            - **Portable**: `Photo.Transfer_*_x64_en-US.msi`
+            - ⚠️ **For iPhone/iPad**: Install [iTunes](https://www.apple.com/itunes/) first
+            
+            ### macOS
+            - Download `.dmg` and drag to Applications
+            - **First launch**: Right-click → Open (to bypass Gatekeeper)
+            - Full iOS and Android support
+            
+            ### Linux
+            - **AppImage**: `photo-transfer_*_amd64.AppImage`
+            - **Debian/Ubuntu**: `photo-transfer_*_amd64.deb`
+            - **RPM**: `photo-transfer-*.rpm`
+            - Make AppImage executable: `chmod +x *.AppImage`
+          files: |
+            artifacts/**/*
+          draft: false
+          prerelease: false
