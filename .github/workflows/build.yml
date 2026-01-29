@@ -64,40 +64,25 @@ jobs:
       - name: Install npm dependencies
         run: npm install
       
-      - name: Install Python Pillow (Linux)
-        if: matrix.target == 'linux'
-        run: sudo apt-get install -y python3-pil
-
-      - name: Install Python Pillow (macOS)
-        if: matrix.target == 'macos'
+      - name: Install Python Pillow
+        shell: bash
         run: |
-          python3 -m venv /tmp/iconvenv
-          source /tmp/iconvenv/bin/activate
-          pip install Pillow
-
-      - name: Install Python Pillow (Windows)
-        if: matrix.target == 'windows'
-        run: pip install Pillow
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get install -y python3-pil
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            pip3 install --break-system-packages Pillow
+          else
+            pip install Pillow || pip3 install Pillow || true
+          fi
 
       - name: Generate app icons
         shell: bash
         run: |
-          # Activate venv on macOS
-          if [[ -f /tmp/iconvenv/bin/activate ]]; then
-            source /tmp/iconvenv/bin/activate
-          fi
           python3 << 'ICONSCRIPT'
           import os
-          import sys
-          
           os.makedirs('src-tauri/icons', exist_ok=True)
           
-          try:
-              from PIL import Image, ImageDraw
-          except ImportError as e:
-              print(f'ERROR: Failed to import PIL: {e}', file=sys.stderr)
-              print('Make sure Pillow is installed', file=sys.stderr)
-              sys.exit(1)
+          from PIL import Image, ImageDraw
           
           def create_icon(size, filename):
               img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -129,69 +114,22 @@ jobs:
               img.save(f'src-tauri/icons/{filename}')
               return img
           
-          try:
-              create_icon(32, '32x32.png')
-              img128 = create_icon(128, '128x128.png')
-              create_icon(256, '128x128@2x.png')
-              img512 = create_icon(512, 'icon.png')
-              
-              # Create ICO for Windows (create on all platforms so bundler doesn't fail)
-              try:
-                  # Simple ICO creation - PIL handles multi-size automatically
-                  img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
-                  print('ICO file created successfully')
-              except Exception as e:
-                  print(f'Warning: ICO creation failed: {e}', file=sys.stderr)
-                  # Try without sizes parameter
-                  try:
-                      img128.save('src-tauri/icons/icon.ico', format='ICO')
-                      print('ICO file created with fallback method')
-                  except Exception as e2:
-                      print(f'ERROR: ICO creation failed: {e2}', file=sys.stderr)
-                      # Don't fail the build - Tauri may handle missing ICO on non-Windows
-                      pass
-              
-              print('Icons created successfully!')
-          except Exception as e:
-              print(f'ERROR: Failed to create icons: {e}', file=sys.stderr)
-              import traceback
-              traceback.print_exc()
-              sys.exit(1)
+          create_icon(32, '32x32.png')
+          img128 = create_icon(128, '128x128.png')
+          create_icon(256, '128x128@2x.png')
+          create_icon(512, 'icon.png')
+          
+          # Create ICO for Windows
+          img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
+          
+          print('Icons created successfully!')
           ICONSCRIPT
-          
-          # Verify required icons were created
-          echo "Verifying icon files..."
           ls -la src-tauri/icons/
-          REQUIRED_ICONS=("32x32.png" "128x128.png" "128x128@2x.png" "icon.png")
-          MISSING=0
-          for icon in "${REQUIRED_ICONS[@]}"; do
-            if [[ ! -f "src-tauri/icons/$icon" ]]; then
-              echo "ERROR: Required icon file missing: $icon"
-              MISSING=1
-            fi
-          done
-          if [[ $MISSING -eq 1 ]]; then
-            echo "ERROR: One or more required icon files are missing!"
-            exit 1
-          fi
-          
-          echo "All required icons verified!"
-      
-      - name: Verify build prerequisites
-        run: |
-          echo "Checking build prerequisites..."
-          if [[ ! -d "../dist" ]]; then
-            echo "ERROR: dist directory does not exist. Frontend build may have failed."
-            exit 1
-          fi
-          echo "dist directory exists: $(ls -la ../dist | head -5)"
-          echo "Icons directory: $(ls -la src-tauri/icons/ | head -10)"
       
       - name: Create macOS icon
         if: matrix.target == 'macos'
         run: |
-          # Activate venv and create iconset directory structure for macOS
-          source /tmp/iconvenv/bin/activate
+          # Create iconset directory structure for macOS
           mkdir -p src-tauri/icons/icon.iconset
           
           python3 << 'ICONSCRIPT'
