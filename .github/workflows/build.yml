@@ -75,7 +75,8 @@ jobs:
             pip install Pillow || pip3 install Pillow || true
           fi
 
-      - name: Generate app icons
+      - name: Generate Windows icon
+        if: matrix.target == 'windows'
         shell: bash
         run: |
           python3 << 'ICONSCRIPT'
@@ -84,7 +85,7 @@ jobs:
           
           from PIL import Image, ImageDraw
           
-          def create_icon(size, filename):
+          def create_icon(size):
               img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               # Rounded rectangle background
@@ -111,20 +112,36 @@ jobs:
                   cx - stem_w, cy,
                   cx + stem_w, cy + arrow_h // 2
               ], fill=(255, 255, 255, 240))
-              img.save(f'src-tauri/icons/{filename}')
               return img
           
-          create_icon(32, '32x32.png')
-          img128 = create_icon(128, '128x128.png')
-          create_icon(256, '128x128@2x.png')
-          create_icon(512, 'icon.png')
-          
-          # Create ICO for Windows
+          # Create ICO for Windows only
+          img128 = create_icon(128)
           img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
           
-          print('Icons created successfully!')
+          print('Windows icon created successfully!')
           ICONSCRIPT
           ls -la src-tauri/icons/
+      
+      - name: Update config for Windows
+        if: matrix.target == 'windows'
+        shell: bash
+        run: |
+          python3 << 'CONFIGSCRIPT'
+          import json
+          
+          # Read the config file
+          with open('src-tauri/tauri.conf.json', 'r') as f:
+              config = json.load(f)
+          
+          # Add icon.ico to the icon array
+          config['tauri']['bundle']['icon'] = ['icons/icon.ico']
+          
+          # Write back to file
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          
+          print('Config updated for Windows build')
+          CONFIGSCRIPT
       
       - name: Create macOS icon
         if: matrix.target == 'macos'
