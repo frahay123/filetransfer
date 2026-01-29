@@ -117,69 +117,14 @@ jobs:
           create_icon(32, '32x32.png')
           img128 = create_icon(128, '128x128.png')
           create_icon(256, '128x128@2x.png')
-          img512 = create_icon(512, 'icon.png')
+          create_icon(512, 'icon.png')
           
-          # Create ICO for Windows (create on all platforms so bundler doesn't fail)
-          try:
-              img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
-              print('ICO file created successfully')
-          except Exception as e:
-              print(f'Warning: ICO creation failed: {e}')
-              # Try without sizes parameter
-              try:
-                  img128.save('src-tauri/icons/icon.ico', format='ICO')
-                  print('ICO file created with fallback method')
-              except Exception as e2:
-                  print(f'Warning: ICO creation failed: {e2}')
-                  # Create a dummy ICO file (copy PNG as fallback)
-                  img128.save('src-tauri/icons/icon.ico', format='PNG')
+          # Create ICO for Windows
+          img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
           
           print('Icons created successfully!')
           ICONSCRIPT
           ls -la src-tauri/icons/
-      
-      - name: Verify icons before build
-        shell: bash
-        run: |
-          echo "Verifying required icon files..."
-          ICON_DIR="src-tauri/icons"
-          REQUIRED_ICONS=("32x32.png" "128x128.png" "128x128@2x.png" "icon.png")
-          MISSING=0
-          for icon in "${REQUIRED_ICONS[@]}"; do
-            if [[ ! -f "$ICON_DIR/$icon" ]]; then
-              echo "ERROR: Required icon file missing: $ICON_DIR/$icon"
-              MISSING=1
-            else
-              echo "✓ Found: $ICON_DIR/$icon"
-            fi
-          done
-          
-          # Check optional icons (create dummy if missing)
-          if [[ ! -f "$ICON_DIR/icon.ico" ]]; then
-            echo "Warning: icon.ico missing, creating placeholder..."
-            if [[ -f "$ICON_DIR/icon.png" ]]; then
-              cp "$ICON_DIR/icon.png" "$ICON_DIR/icon.ico" 2>/dev/null || touch "$ICON_DIR/icon.ico"
-            else
-              touch "$ICON_DIR/icon.ico"
-            fi
-          fi
-          
-          if [[ ! -f "$ICON_DIR/icon.icns" ]] && [[ "${{ matrix.target }}" == "linux" ]]; then
-            echo "Warning: icon.icns missing on Linux, creating placeholder..."
-            if [[ -f "$ICON_DIR/icon.png" ]]; then
-              cp "$ICON_DIR/icon.png" "$ICON_DIR/icon.icns" 2>/dev/null || touch "$ICON_DIR/icon.icns"
-            else
-              touch "$ICON_DIR/icon.icns"
-            fi
-          fi
-          
-          if [[ $MISSING -eq 1 ]]; then
-            echo "ERROR: One or more required icon files are missing!"
-            exit 1
-          fi
-          
-          echo "All icon files verified!"
-          ls -lah "$ICON_DIR"
       
       - name: Create macOS icon
         if: matrix.target == 'macos'
@@ -231,25 +176,6 @@ jobs:
           iconutil -c icns src-tauri/icons/icon.iconset -o src-tauri/icons/icon.icns
           rm -rf src-tauri/icons/icon.iconset
           ls -la src-tauri/icons/
-        
-      - name: Verify build prerequisites
-        shell: bash
-        run: |
-          echo "Checking build prerequisites..."
-          echo "Current directory: $(pwd)"
-          echo "Checking dist directory..."
-          if [[ ! -d "dist" ]]; then
-            echo "ERROR: dist directory does not exist. Frontend build may have failed."
-            exit 1
-          fi
-          echo "✓ dist directory exists"
-          ls -la dist/ | head -10
-          echo ""
-          echo "Checking icons directory..."
-          ls -la src-tauri/icons/ || echo "Icons directory not found!"
-          echo ""
-          echo "Checking src-tauri directory structure..."
-          ls -la src-tauri/
         
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
