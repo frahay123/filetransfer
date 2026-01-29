@@ -202,15 +202,39 @@ jobs:
           rm -rf src-tauri/icons/icon.iconset
           ls -la src-tauri/icons/
         
+      - name: Update version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          # Extract version from tag (e.g., v2.1.4 -> 2.1.4)
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION="${TAG_NAME#v}"  # Remove 'v' prefix if present
+          echo "Updating version to $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Update tauri.conf.json
+          python3 << 'VERSIONSCRIPT'
+          import json
+          import os
+          
+          # Get version from environment variable
+          version = os.environ.get('VERSION', '2.0.0')
+          
+          with open('src-tauri/tauri.conf.json', 'r') as f:
+              config = json.load(f)
+          
+          config['package']['version'] = version
+          
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(config, f, indent=2)
+          
+          print(f'Updated version to {version}')
+          VERSIONSCRIPT
+      
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # Don't create release here - we'll do it in a separate job after all builds complete
-          tagName: v__VERSION__
-          releaseDraft: false
-          prerelease: false
+        # Don't create release here - we'll do it in a separate job after all builds complete
+        # Just build the app, no release creation
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
