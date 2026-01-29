@@ -110,11 +110,8 @@ jobs:
               create_icon(256, '128x128@2x.png')
               create_icon(512, 'icon.png')
               
-              # Create ICO
+              # Create ICO for Windows
               img128.save('src-tauri/icons/icon.ico', format='ICO', sizes=[(32, 32), (48, 48), (64, 64), (128, 128)])
-              
-              # For macOS, we'll let Tauri handle icns or create a simple one
-              create_icon(512, 'icon.icns')  # Tauri will convert if needed
               
               print('Icons created successfully!')
           except Exception as e:
@@ -122,6 +119,59 @@ jobs:
               print('Tauri will use default icons')
           ICONSCRIPT
           ls -la src-tauri/icons/ 2>/dev/null || dir src-tauri\\icons 2>NUL || echo "Icons directory created"
+      
+      - name: Create macOS icon
+        if: matrix.target == 'macos'
+        run: |
+          # Create iconset directory structure for macOS
+          mkdir -p src-tauri/icons/icon.iconset
+          
+          # Generate all required sizes using sips (built into macOS)
+          pip3 install Pillow
+          python3 << 'ICONSCRIPT'
+          from PIL import Image, ImageDraw
+          import os
+
+          def create_icon(size):
+              img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+              draw = ImageDraw.Draw(img)
+              margin = size // 10
+              radius = size // 5
+              draw.rounded_rectangle(
+                  [margin, margin, size - margin, size - margin],
+                  radius=radius,
+                  fill=(14, 165, 233, 255)
+              )
+              cx, cy = size // 2, size // 2
+              arrow_h = size // 3
+              arrow_w = size // 4
+              draw.polygon([
+                  (cx, cy - arrow_h // 2),
+                  (cx + arrow_w, cy),
+                  (cx - arrow_w, cy)
+              ], fill=(255, 255, 255, 240))
+              stem_w = arrow_w // 2
+              draw.rectangle([
+                  cx - stem_w, cy,
+                  cx + stem_w, cy + arrow_h // 2
+              ], fill=(255, 255, 255, 240))
+              return img
+
+          iconset = 'src-tauri/icons/icon.iconset'
+          sizes = [16, 32, 64, 128, 256, 512, 1024]
+          for size in sizes:
+              img = create_icon(size)
+              img.save(f'{iconset}/icon_{size}x{size}.png')
+              if size <= 512:
+                  img2x = create_icon(size * 2)
+                  img2x.save(f'{iconset}/icon_{size}x{size}@2x.png')
+          print('Iconset created')
+          ICONSCRIPT
+          
+          # Convert iconset to icns using iconutil
+          iconutil -c icns src-tauri/icons/icon.iconset -o src-tauri/icons/icon.icns
+          rm -rf src-tauri/icons/icon.iconset
+          ls -la src-tauri/icons/
         
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

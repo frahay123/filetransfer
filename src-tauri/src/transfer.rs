@@ -33,9 +33,10 @@ fn transfer_mtp_file(
         // If we have a mount point (GVFS/gio), copy using gio
         if let Some(ref mount) = device.mount_point {
             let source = format!("{}/{}", mount, item.full_path.trim_start_matches('/'));
+            let dest_str = destination.to_string_lossy().to_string();
             
             let output = Command::new("gio")
-                .args(["copy", &source, &destination.to_string_lossy()])
+                .args(["copy", &source, &dest_str])
                 .output()
                 .map_err(|e| e.to_string())?;
             
@@ -45,8 +46,9 @@ fn transfer_mtp_file(
         }
         
         // Fallback: use mtp-getfile
+        let dest_str = destination.to_string_lossy().to_string();
         let output = Command::new("mtp-getfile")
-            .args([&item.full_path, &destination.to_string_lossy()])
+            .args([&item.full_path, &dest_str])
             .output();
         
         match output {
